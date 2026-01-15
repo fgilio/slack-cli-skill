@@ -22,7 +22,7 @@ class AppServiceProvider extends ServiceProvider
         // Bind SlackClient as singleton
         $this->app->singleton(SlackClient::class);
 
-        if (Phar::running() || getenv('SLACK_CLI_PRODUCTION')) {
+        if (Phar::running() || getenv('SKILL_PRODUCTION')) {
             $this->hideDevCommands();
         }
     }
