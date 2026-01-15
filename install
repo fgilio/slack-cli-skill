@@ -1,0 +1,10 @@
+#!/bin/bash
+TARGET="${1:-$HOME/.local/bin}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Make wrapper executable
+chmod +x "$SCRIPT_DIR/slack-cli.sh"
+
+# Link wrapper (binary has code signing issues on macOS)
+ln -sf "$SCRIPT_DIR/slack-cli.sh" "$TARGET/slack-cli"
+echo "Installed: $TARGET/slack-cli"

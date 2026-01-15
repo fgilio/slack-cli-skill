@@ -1,0 +1,10 @@
+pre-commit:
+  commands:
+    pint:
+      glob: "*.php"
+      run: cd src && composer lint
+
+pre-push:
+  commands:
+    phpstan:
+      run: cd src && composer test:types
