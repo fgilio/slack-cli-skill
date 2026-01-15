@@ -63,12 +63,7 @@ class ConfigCommand extends Command
     private function runSetup(): int
     {
         $jsCode = <<<'JS'
-(function() {
-  const xoxc = JSON.parse(localStorage.getItem('localConfig_v2'))?.teams?.[Object.keys(JSON.parse(localStorage.getItem('localConfig_v2'))?.teams || {})[0]]?.token;
-  const xoxd = document.cookie.split('; ').find(c => c.startsWith('d='))?.slice(2);
-  console.log('xoxc:', xoxc);
-  console.log('xoxd:', xoxd);
-})();
+JSON.parse(localStorage.getItem('localConfig_v2'))?.teams?.[Object.keys(JSON.parse(localStorage.getItem('localConfig_v2'))?.teams || {})[0]]?.token
 JS;
 
         // Copy to clipboard (macOS)
@@ -85,18 +80,20 @@ JS;
         $this->line('');
         $this->line('<fg=cyan>Slack CLI Setup</>');
         $this->line('');
-        $this->line('<fg=yellow>Steps:</>');
-        $this->line('1. Open Slack in your browser (not the desktop app)');
-        $this->line('2. Press F12 to open Developer Tools');
-        $this->line('3. Go to the Console tab');
-        $this->line('4. Paste the code '.($copied ? '<fg=green>(already copied to clipboard)</>' : 'below'));
-        $this->line('5. Copy the xoxc and xoxd values shown');
+        $this->line('Open Slack in your <fg=white>browser</> and press <fg=white>F12</> for DevTools.');
         $this->line('');
-
+        $this->line('<fg=yellow>Get xoxc token:</>');
+        $this->line('  1. Go to <fg=white>Console</> tab');
+        $this->line('  2. Paste code '.($copied ? '<fg=green>(copied to clipboard)</>' : 'and press Enter:'));
         if (! $copied) {
-            $this->line('<fg=gray>'.$jsCode.'</>');
-            $this->line('');
+            $this->line('     <fg=gray>'.$jsCode.'</>');
         }
+        $this->line('');
+        $this->line('<fg=yellow>Get xoxd cookie:</>');
+        $this->line('  1. Go to <fg=white>Application</> tab (or Storage in Firefox)');
+        $this->line('  2. Expand <fg=white>Cookies</> > your workspace URL');
+        $this->line('  3. Find cookie named <fg=white>d</> and copy its <fg=white>Value</>');
+        $this->line('');
 
         $xoxc = password(
             label: 'Enter your xoxc token (starts with xoxc-)',
