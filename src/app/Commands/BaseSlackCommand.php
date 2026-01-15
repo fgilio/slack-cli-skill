@@ -94,6 +94,8 @@ abstract class BaseSlackCommand extends Command
 
     /**
      * Format a message for output.
+     *
+     * @param  array<string, mixed>  $message
      */
     protected function formatMessage(array $message): string
     {
@@ -148,11 +150,12 @@ abstract class BaseSlackCommand extends Command
 
     /**
      * Format channel for list output.
+     *
+     * @param  array<string, mixed>  $channel
      */
     protected function formatChannelLine(array $channel): string
     {
         $name = Arr::get($channel, 'name', '');
-        $id = Arr::get($channel, 'id', '');
         $isPrivate = Arr::get($channel, 'is_private', false);
         $isIm = Arr::get($channel, 'is_im', false);
         $isMpim = Arr::get($channel, 'is_mpim', false);
@@ -188,6 +191,8 @@ abstract class BaseSlackCommand extends Command
 
     /**
      * Format user for list output.
+     *
+     * @param  array<string, mixed>  $user
      */
     protected function formatUserLine(array $user): string
     {

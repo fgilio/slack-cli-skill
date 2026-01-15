@@ -29,6 +29,7 @@ class SlackClient
 
     private ?string $xoxd = null;
 
+    /** @var Collection<string, array<string, mixed>>|null */
     private ?Collection $cachedUsers = null;
 
     public function __construct()
@@ -53,6 +54,7 @@ class SlackClient
         $this->clearAuthCache();
     }
 
+    /** @return Collection<string, mixed> */
     public function validateAuth(): Collection
     {
         $cacheKey = 'slack:auth:validated';
@@ -82,6 +84,7 @@ class SlackClient
     // Channels
     // =========================================================================
 
+    /** @return Collection<int, array<string, mixed>> */
     public function listChannels(?string $types = null, int $limit = 50): Collection
     {
         $types = $types ?? 'public_channel,private_channel,mpim,im';
@@ -92,6 +95,7 @@ class SlackClient
         ], $limit, 'channels');
     }
 
+    /** @return Collection<string, mixed>|null */
     public function getChannelInfo(string $channel): ?Collection
     {
         $channelId = $this->resolveChannelId($channel);
@@ -108,6 +112,7 @@ class SlackClient
         return collect($response->get('channel'));
     }
 
+    /** @return Collection<int, Collection<string, mixed>> */
     public function getChannelMembers(string $channel): Collection
     {
         $channelId = $this->resolveChannelId($channel);
@@ -158,6 +163,7 @@ class SlackClient
     // Messages
     // =========================================================================
 
+    /** @return Collection<int, array<string, mixed>> */
     public function getHistory(string $channel, int $limit = 50, string $sort = 'newest'): Collection
     {
         $channelId = $this->resolveChannelId($channel);
@@ -173,6 +179,7 @@ class SlackClient
         return $messages;
     }
 
+    /** @return Collection<int, array<string, mixed>> */
     public function getThreadReplies(string $channel, string $threadTs): Collection
     {
         $channelId = $this->resolveChannelId($channel);
@@ -190,6 +197,10 @@ class SlackClient
     // Search
     // =========================================================================
 
+    /**
+     * @param  array<string, string>  $filters
+     * @return Collection<int, array<string, mixed>>
+     */
     public function searchMessages(string $query, array $filters = [], int $limit = 20, string $sort = 'timestamp'): Collection
     {
         $searchQuery = $query;
@@ -231,6 +242,7 @@ class SlackClient
     // Users
     // =========================================================================
 
+    /** @return Collection<string, mixed>|null */
     public function getUserInfo(string $userId): ?Collection
     {
         // Try cache first
@@ -251,6 +263,7 @@ class SlackClient
         return collect($response->get('user'));
     }
 
+    /** @return Collection<int, array<string, mixed>> */
     public function searchUsers(string $query): Collection
     {
         $users = $this->getAllUsers();
@@ -282,6 +295,7 @@ class SlackClient
             ?: $userId;
     }
 
+    /** @return Collection<string, array<string, mixed>> */
     public function getAllUsers(): Collection
     {
         if ($this->cachedUsers !== null) {
@@ -305,6 +319,7 @@ class SlackClient
         return $this->cachedUsers;
     }
 
+    /** @return Collection<string, array<string, mixed>> */
     public function refreshUserCache(): Collection
     {
         $this->deleteCacheValue('slack:users:all');
@@ -351,6 +366,7 @@ class SlackClient
     // URL Parsing
     // =========================================================================
 
+    /** @return Collection<string, string|null> */
     public function parseSlackUrl(string $url): Collection
     {
         // Format 1: workspace.slack.com/archives/C01ABC123/p1234567890123456
@@ -465,6 +481,7 @@ class SlackClient
     // Configuration
     // =========================================================================
 
+    /** @return array{configured: bool, config_path: string} */
     public function getConfig(): array
     {
         return [
@@ -592,6 +609,10 @@ class SlackClient
     // HTTP
     // =========================================================================
 
+    /**
+     * @param  array<string, mixed>  $params
+     * @return Collection<string, mixed>
+     */
     private function request(string $method, array $params = []): Collection
     {
         $this->ensureConfigured();
@@ -607,7 +628,7 @@ class SlackClient
                     : null;
 
                 if ($response?->status() === 429) {
-                    $retryAfter = (int) ($response->header('Retry-After') ?? 1);
+                    $retryAfter = (int) ($response->header('Retry-After') ?: 1);
                     fwrite(STDERR, "Rate limited. Waiting {$retryAfter}s...\n");
 
                     return $retryAfter * 1000;
@@ -624,6 +645,10 @@ class SlackClient
         return collect($response->json());
     }
 
+    /**
+     * @param  array<string, mixed>  $params
+     * @return Collection<int, mixed>
+     */
     private function paginatedRequest(string $method, array $params, int $limit, string $dataKey): Collection
     {
         $results = collect();

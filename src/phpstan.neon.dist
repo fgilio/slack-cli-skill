@@ -2,3 +2,6 @@ parameters:
     level: 6
     paths:
         - app
+    ignoreErrors:
+        # collect() with API response data has unresolvable template types
+        - identifier: argument.templateType

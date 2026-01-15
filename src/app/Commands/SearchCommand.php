@@ -60,6 +60,7 @@ class SearchCommand extends BaseSlackCommand
         return self::SUCCESS;
     }
 
+    /** @param array<string, mixed> $result */
     private function outputSearchResult(array $result): void
     {
         $channel = Arr::get($result, 'channel.name', 'unknown');

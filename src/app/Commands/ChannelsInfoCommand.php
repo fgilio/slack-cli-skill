@@ -39,6 +39,7 @@ class ChannelsInfoCommand extends BaseSlackCommand
         return self::SUCCESS;
     }
 
+    /** @param \Illuminate\Support\Collection<string, mixed> $info */
     private function outputChannelInfo($info): void
     {
         $name = Arr::get($info, 'name', '');

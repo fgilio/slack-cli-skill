@@ -37,6 +37,7 @@ class UsersInfoCommand extends BaseSlackCommand
         return self::SUCCESS;
     }
 
+    /** @param \Illuminate\Support\Collection<string, mixed> $user */
     private function outputUserInfo($user): void
     {
         $name = Arr::get($user, 'name', '');
