@@ -62,30 +62,41 @@ class ConfigCommand extends Command
 
     private function runSetup(): int
     {
+        $jsCode = <<<'JS'
+(function() {
+  const xoxc = JSON.parse(localStorage.getItem('localConfig_v2'))?.teams?.[Object.keys(JSON.parse(localStorage.getItem('localConfig_v2'))?.teams || {})[0]]?.token;
+  const xoxd = document.cookie.split('; ').find(c => c.startsWith('d='))?.slice(2);
+  console.log('xoxc:', xoxc);
+  console.log('xoxd:', xoxd);
+})();
+JS;
+
+        // Copy to clipboard (macOS)
+        $process = proc_open('pbcopy', [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes);
+        if (is_resource($process)) {
+            fwrite($pipes[0], $jsCode);
+            fclose($pipes[0]);
+            proc_close($process);
+            $copied = true;
+        } else {
+            $copied = false;
+        }
+
         $this->line('');
         $this->line('<fg=cyan>Slack CLI Setup</>');
-        $this->line('');
-        $this->line('This CLI uses browser tokens to access Slack.');
-        $this->line('You need to extract <fg=white>xoxc</> and <fg=white>xoxd</> tokens from your browser.');
         $this->line('');
         $this->line('<fg=yellow>Steps:</>');
         $this->line('1. Open Slack in your browser (not the desktop app)');
         $this->line('2. Press F12 to open Developer Tools');
         $this->line('3. Go to the Console tab');
-        $this->line('4. Paste and run this code:');
+        $this->line('4. Paste the code '.($copied ? '<fg=green>(already copied to clipboard)</>' : 'below'));
+        $this->line('5. Copy the xoxc and xoxd values shown');
         $this->line('');
-        $this->line('<fg=gray>┌─────────────────────────────────────────────────────────────────────┐</>');
-        $this->line('<fg=gray>│</> <fg=white>(function() {</>                                                       <fg=gray>│</>');
-        $this->line('<fg=gray>│</>   <fg=white>const xoxc = JSON.parse(localStorage.getItem(\'localConfig_v2\'))</>  <fg=gray>│</>');
-        $this->line('<fg=gray>│</>     <fg=white>?.teams?.[Object.keys(JSON.parse(localStorage.getItem(</>          <fg=gray>│</>');
-        $this->line('<fg=gray>│</>       <fg=white>\'localConfig_v2\'))?.teams || {})[0]]?.token;</>                  <fg=gray>│</>');
-        $this->line('<fg=gray>│</>   <fg=white>const xoxd = document.cookie.split(\'; \')</>                        <fg=gray>│</>');
-        $this->line('<fg=gray>│</>     <fg=white>.find(c => c.startsWith(\'d=\'))?.slice(2);</>                      <fg=gray>│</>');
-        $this->line('<fg=gray>│</>   <fg=white>console.log(\'xoxc:\', xoxc);</>                                      <fg=gray>│</>');
-        $this->line('<fg=gray>│</>   <fg=white>console.log(\'xoxd:\', xoxd);</>                                      <fg=gray>│</>');
-        $this->line('<fg=gray>│</> <fg=white>})();</>                                                              <fg=gray>│</>');
-        $this->line('<fg=gray>└─────────────────────────────────────────────────────────────────────┘</>');
-        $this->line('');
+
+        if (! $copied) {
+            $this->line('<fg=gray>'.$jsCode.'</>');
+            $this->line('');
+        }
 
         $xoxc = password(
             label: 'Enter your xoxc token (starts with xoxc-)',
