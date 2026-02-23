@@ -1,7 +1,9 @@
 ---
 name: slack-cli
 description: >
-  Read-only Slack CLI using browser tokens. Access DMs, private channels, and everything visible in Slack. Keywords: slack, slack-cli.
+  Read-only Slack CLI using browser tokens. Access DMs, private channels, and everything visible in Slack. Keywords: slack, slack-cli. Use when user asks about Slack messages, channels, or DMs.
+user-invocable: true
+disable-model-invocation: false
 ---
 
 # slack-cli
