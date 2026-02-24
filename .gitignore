@@ -5,3 +5,5 @@ analytics.jsonl
 .env
 src/vendor/
 src/builds/
+skill/analytics.jsonl
+skill/*.jsonl
