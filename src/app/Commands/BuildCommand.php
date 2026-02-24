@@ -22,7 +22,9 @@ class BuildCommand extends Command
     {
         $projectDir = dirname(__DIR__, 2);
         $skillRoot = dirname($projectDir).'/skill';
-        if (! is_dir($skillRoot)) { mkdir($skillRoot, 0755, true); }
+        if (! is_dir($skillRoot)) {
+            mkdir($skillRoot, 0755, true);
+        }
         $microPath = $projectDir.'/buildroot/bin/micro.sfx';
         $name = config('app.name');
 
