@@ -15,6 +15,8 @@
     "KevinGH\\Box\\Compactor\\Php",
     "KevinGH\\Box\\Compactor\\Json"
   ],
+  "exclude-dev-files": true,
+  "force-autodiscovery": true,
   "main": "slack-cli",
   "output": "builds/slack-cli.phar",
   "check-requirements": false
