@@ -12,13 +12,35 @@
         "jolicode/jolinotif/doc",
         "jolicode/jolinotif/example",
         "jolicode/jolinotif/tools",
+        "jolicode/php-os-helper/tools",
+        "nesbot/carbon/bin",
         "nesbot/carbon/src/Carbon/Lang",
+        "laravel-zero/framework/bin",
         "laravel-zero/foundation/src/Illuminate/Foundation/resources/exceptions",
         "laravel-zero/foundation/src/Illuminate/Foundation/Console/stubs",
         "filp/whoops/src/Whoops/Resources",
-        "symfony/error-handler/Resources/assets"
+        "symfony/error-handler/Resources",
+        "symfony/var-dumper/Resources/bin",
+        "symfony/var-dumper/Resources/css",
+        "symfony/var-dumper/Resources/js",
+        "symfony/translation/Resources/bin",
+        "symfony/translation/Resources/schemas",
+        "brick/math/tools",
+        "psr/http-message/docs",
+        "doctrine/inflector/docs"
       ],
-      "notName": ["*.exe", "*.dll", "*.bat", "*.md", "*.dist", "*.neon", "*.stub", "*.gif", "*.png", "*.svg", "*.jpg"]
+      "notName": [
+        "*.exe", "*.dll", "*.bat",
+        "*.md", "*.txt", "*.rst",
+        "*.dist", "*.neon", "*.stub",
+        "*.gif", "*.png", "*.svg", "*.jpg",
+        "*.xsd", "*.yml", "*.yaml",
+        "*.css", "*.js",
+        "LICENSE*", "CHANGELOG*", "UPGRADE*",
+        "castor.php",
+        ".gitignore", ".gitattributes", ".editorconfig",
+        ".php-cs-fixer.php", ".deepsource.toml", ".styleci.yml"
+      ]
     }
   ],
   "files": [
