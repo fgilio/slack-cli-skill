@@ -16,7 +16,20 @@
     "KevinGH\\Box\\Compactor\\Json"
   ],
   "exclude-dev-files": true,
-  "force-autodiscovery": true,
+  "blacklist": [
+    "vendor/jolicode/jolinotif/bin/snoreToast/snoretoast-x86.exe",
+    "vendor/jolicode/jolinotif/bin/snoreToast/LICENSE",
+    "vendor/jolicode/jolinotif/bin/snoreToast/README.md",
+    "vendor/jolicode/jolinotif/bin/notifu/notifu.exe",
+    "vendor/jolicode/jolinotif/bin/notifu/README.md",
+    "vendor/jolicode/jolinotif/bin/toaster/toast.exe",
+    "vendor/jolicode/jolinotif/bin/toaster/Microsoft.WindowsAPICodePack.Shell.dll",
+    "vendor/jolicode/jolinotif/bin/toaster/Microsoft.WindowsAPICodePack.dll",
+    "vendor/jolicode/jolinotif/bin/toaster/README.md",
+    "vendor/jolicode/jolinotif/bin/wsl-notify-send/wsl-notify-send.exe",
+    "vendor/jolicode/jolinotif/bin/wsl-notify-send/LICENSE",
+    "vendor/jolicode/jolinotif/bin/wsl-notify-send/README.md"
+  ],
   "main": "slack-cli",
   "output": "builds/slack-cli.phar",
   "check-requirements": false
