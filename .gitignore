@@ -5,5 +5,11 @@ analytics.jsonl
 .env
 src/vendor/
 src/builds/
+src/buildroot/
+src/source/
+src/pkgroot/
+src/downloads/
+src/log/
+src/spc
 skill/analytics.jsonl
 skill/*.jsonl
