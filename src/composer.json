@@ -38,7 +38,12 @@
         "illuminate/session": "*",
         "illuminate/view": "*",
         "illuminate/bus": "*",
-        "illuminate/testing": "*"
+        "illuminate/testing": "*",
+        "symfony/polyfill-ctype": "*",
+        "symfony/polyfill-mbstring": "*",
+        "symfony/polyfill-php80": "*",
+        "symfony/polyfill-php83": "*",
+        "symfony/polyfill-php84": "*"
     },
     "autoload": {
         "psr-4": {
@@ -65,7 +70,7 @@
             "pestphp/pest-plugin": true
         },
         "platform": {
-            "php": "8.5.2"
+            "php": "8.5"
         }
     },
     "minimum-stability": "stable",
