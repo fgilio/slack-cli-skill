@@ -9,6 +9,7 @@ src/buildroot/
 src/source/
 src/pkgroot/
 src/downloads/
-log/
+src/log/
+src/spc
 skill/analytics.jsonl
 skill/*.jsonl

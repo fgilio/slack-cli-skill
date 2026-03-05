@@ -2,11 +2,14 @@
 
 ## Current State
 
-| Component | Size |
-|-----------|------|
-| Original binary (from Git LFS) | **34.6 MB** |
-| micro.sfx (PHP runtime) | ~26.7 MB (estimated) |
-| PHAR (application + vendor) | ~7.9 MB (GZ compressed from ~29 MB) |
+| Component | Before | After |
+|-----------|--------|-------|
+| micro.sfx (PHP runtime) | ~27 MB (PHP 8.4, 24 exts) | 16 MB (PHP 8.5, 8 exts) |
+| PHAR (app + vendor) | ~7.9 MB (4102 files) | 1.9 MB (2492 files) |
+| **macOS binary** | **~35 MB** | **17.6 MB (-50%)** |
+| **Linux binary** (with UPX) | - | **~6 MB (-83%)** |
+
+Note: UPX compression only works on Linux ELF binaries, not macOS Mach-O arm64.
 
 ## Where the Size Comes From
 
