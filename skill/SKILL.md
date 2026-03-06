@@ -10,6 +10,11 @@ disable-model-invocation: false
 
 Read-only Slack CLI using browser tokens (xoxc/xoxd). Access DMs, private channels, and everything you can see in Slack.
 
+## Execution
+
+`slack-cli` is a self-contained binary available on PATH.
+Run it directly - never prefix with `bun`, `node`, `php`, or any runtime.
+
 ## Quick Reference
 
 | Command | Purpose |
