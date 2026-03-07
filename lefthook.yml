@@ -2,9 +2,9 @@ pre-commit:
   commands:
     pint:
       glob: "*.php"
-      run: cd src && composer lint
+      run: 'cd src && if command -v herd &>/dev/null; then herd composer lint; else composer lint; fi'
 
 pre-push:
   commands:
     phpstan:
-      run: cd src && composer test:types
+      run: 'cd src && if command -v herd &>/dev/null; then herd php vendor/bin/phpstan analyse --memory-limit=512M; else composer test:types; fi'
