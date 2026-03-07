@@ -363,6 +363,81 @@ class SlackClient
     }
 
     // =========================================================================
+    // Files
+    // =========================================================================
+
+    /** @return array{id: string, name: string, mimetype: string, size: int, local_path: string} */
+    public function downloadFile(string $fileId): array
+    {
+        $response = $this->request('files.info', ['file' => $fileId]);
+
+        if (! $response->get('ok')) {
+            throw new RuntimeException('File not found: '.$response->get('error', 'unknown'));
+        }
+
+        $file = $response->get('file');
+        $name = Arr::get($file, 'name', 'file');
+        $mimetype = Arr::get($file, 'mimetype', 'application/octet-stream');
+        $size = Arr::get($file, 'size', 0);
+        $downloadUrl = Arr::get($file, 'url_private_download', Arr::get($file, 'url_private'));
+
+        if (! $downloadUrl) {
+            throw new RuntimeException('File has no download URL');
+        }
+
+        // Sanitize filename
+        $sanitized = preg_replace('/[^\w\-. ]/', '_', $name);
+        $sanitized = preg_replace('/_+/', '_', $sanitized);
+        $sanitized = trim($sanitized, '_');
+
+        if (empty($sanitized)) {
+            $sanitized = 'file';
+        }
+
+        // Create downloads dir
+        $dir = $this->getConfigDir().'/downloads';
+        if (! is_dir($dir)) {
+            mkdir($dir, 0700, true);
+        }
+
+        // Handle duplicates
+        $localPath = $dir.'/'.$sanitized;
+        if (file_exists($localPath)) {
+            $info = pathinfo($sanitized);
+            $base = $info['filename'];
+            $ext = isset($info['extension']) ? '.'.$info['extension'] : '';
+            $counter = 1;
+            while (file_exists($localPath)) {
+                $localPath = $dir.'/'.$base.'_'.$counter.$ext;
+                $counter++;
+            }
+        }
+
+        // Download with auth
+        $this->ensureConfigured();
+
+        $httpResponse = Http::withHeaders([
+            'Authorization' => 'Bearer '.$this->xoxc,
+        ])
+            ->withCookies(['d' => $this->xoxd], 'slack.com')
+            ->withOptions(['sink' => $localPath])
+            ->get($downloadUrl);
+
+        if (! $httpResponse->successful()) {
+            @unlink($localPath);
+            throw new RuntimeException('Download failed: HTTP '.$httpResponse->status());
+        }
+
+        return [
+            'id' => $fileId,
+            'name' => $name,
+            'mimetype' => $mimetype,
+            'size' => $size,
+            'local_path' => $localPath,
+        ];
+    }
+
+    // =========================================================================
     // URL Parsing
     // =========================================================================
 

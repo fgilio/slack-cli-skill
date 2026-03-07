@@ -27,6 +27,7 @@ Run it directly - never prefix with `bun`, `node`, `php`, or any runtime.
 | `slack-cli search <query>` | Search messages |
 | `slack-cli users:lookup <query>` | Find users |
 | `slack-cli users:info <user>` | User details |
+| `slack-cli files:get <file-id>` | Download a file |
 
 ## Example Prompts
 
@@ -38,6 +39,7 @@ Run it directly - never prefix with `bun`, `node`, `php`, or any runtime.
 - "What channels am I in?"
 - "Find all messages mentioning the API outage from last week"
 - "Show me recent DMs"
+- "Download the PDF from this Slack thread"
 
 ## Usage
 
@@ -59,6 +61,10 @@ slack-cli search "deployment" --in=engineering --from=john
 # Users
 slack-cli users:lookup john
 slack-cli users:info john.smith
+
+# Download files
+slack-cli files:get F0AK7U1V9PE
+slack-cli files:get F0AK7U1V9PE --json
 ```
 
 ## Notes

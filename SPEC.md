@@ -42,6 +42,7 @@ Read-only Slack CLI using browser tokens (xoxc/xoxd). Provides full access to DM
 | `search` | Search messages |
 | `users:lookup` | Find users by name |
 | `users:info` | User details |
+| `files:get` | Download a file by ID |
 
 ## API Endpoints
 
@@ -54,6 +55,7 @@ Read-only Slack CLI using browser tokens (xoxc/xoxd). Provides full access to DM
 - `search.messages` - Search
 - `users.list` - All users
 - `users.info` - User details
+- `files.info` - File metadata + download URL
 
 ## v2 Scope (Deferred)
 
