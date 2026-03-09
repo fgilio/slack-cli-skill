@@ -1,13 +1,9 @@
 # slack-cli - Development
 
-## Built With
-
-This skill was created using `php-cli-builder`.
-
 ## Setup
 
 ```bash
-cd ~/.claude/skills/slack-cli/src
+cd $AGENT_HOME/skills/slack-cli/src
 composer install
 ./slack-cli --help
 ```
@@ -16,13 +12,13 @@ composer install
 
 First-time setup (builds PHP + micro.sfx):
 ```bash
-php-cli-builder-spc-setup --doctor
-php-cli-builder-spc-build
+php-cli-skill-runtime-setup --doctor
+php-cli-skill-runtime-build
 ```
 
 Build and install to skill root:
 ```bash
-./slack-cli build              # builds + copies to ../slack-cli
+./slack-cli build              # builds + copies to ../skill/slack-cli
 ./slack-cli build --no-install # only builds to builds/slack-cli
 ```
 
