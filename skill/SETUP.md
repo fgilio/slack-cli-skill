@@ -9,7 +9,7 @@
 
 Or manually:
 ```bash
-ln -sf ~/.claude/skills/slack-cli/slack-cli ~/.local/bin/slack-cli
+ln -sf $AGENT_HOME/skills/slack-cli/slack-cli ~/.local/bin/slack-cli
 ```
 
 ## Token Setup
