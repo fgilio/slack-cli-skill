@@ -15,7 +15,7 @@ JSONL with one entry per command:
 
 ## When Active
 
-Only when running the built binary. Development runs (`php src/$NAME`) do not track.
+Only when running the built binary. Development runs (`php src/slack-cli`) do not track.
 
 ## Clear
 
