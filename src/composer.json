@@ -17,6 +17,8 @@
     ],
     "require": {
         "php": "^8.5",
+        "ext-curl": "*",
+        "ext-openssl": "*",
         "fgilio/agent-skill-foundation": "^0.5.0",
         "guzzlehttp/guzzle": "^7.9",
         "illuminate/http": "^12.0",
