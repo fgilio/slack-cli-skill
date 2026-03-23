@@ -1,14 +1,14 @@
 ---
 name: slack-cli
 description: >
-  Read-only Slack CLI using browser tokens. Access DMs, private channels, and everything visible in Slack. Keywords: slack, slack-cli. Use when user asks about Slack messages, channels, or DMs.
+  Read-only Slack CLI. Access DMs, private channels, and everything visible in Slack. Keywords: slack, slack-cli. Use when user asks about Slack messages, channels, or DMs.
 user-invocable: true
 disable-model-invocation: false
 ---
 
 # slack-cli
 
-Read-only Slack CLI using browser tokens (xoxc/xoxd). Access DMs, private channels, and everything you can see in Slack.
+Read-only Slack CLI. Access DMs, private channels, and everything you can see in Slack.
 
 ## Execution
 
@@ -70,6 +70,6 @@ slack-cli files:get F0AK7U1V9PE --json
 ## Notes
 
 - v1 is read-only - no sending messages
-- Uses browser tokens for full access (same as web app)
+- Uses xoxc/xoxd tokens for full access (same as web app)
 - All commands support `--json` for machine-readable output
 - Tokens stored in ~/.slack-cli/.env

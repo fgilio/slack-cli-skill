@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -10,7 +11,7 @@ use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
- * Slack API client using browser tokens (xoxc/xoxd).
+ * Slack API client (xoxc/xoxd tokens).
  *
  * Handles authentication, caching, pagination, and all read operations.
  * All public methods return Collections for fluent chaining.
@@ -698,7 +699,7 @@ class SlackClient
             ])
             ->withCookies(['d' => $this->xoxd], 'slack.com')
             ->retry(3, function (int $attempt, \Throwable $exception) {
-                $response = $exception instanceof \Illuminate\Http\Client\RequestException
+                $response = $exception instanceof RequestException
                     ? $exception->response
                     : null;
 

@@ -1,6 +1,6 @@
 # slack-cli
 
-Read-only Slack CLI using browser tokens. Access DMs, private channels, and everything visible in your Slack workspace.
+Read-only Slack CLI. Access DMs, private channels, and everything visible in your Slack workspace.
 
 Self-contained binary - no PHP required.
 
