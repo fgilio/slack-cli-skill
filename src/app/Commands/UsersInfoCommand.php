@@ -3,6 +3,7 @@
 namespace App\Commands;
 
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use RuntimeException;
 
 /**
@@ -37,7 +38,7 @@ class UsersInfoCommand extends BaseSlackCommand
         return self::SUCCESS;
     }
 
-    /** @param \Illuminate\Support\Collection<string, mixed> $user */
+    /** @param Collection<string, mixed> $user */
     private function outputUserInfo($user): void
     {
         $name = Arr::get($user, 'name', '');
