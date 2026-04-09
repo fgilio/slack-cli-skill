@@ -55,8 +55,8 @@ slack-cli channels:list --type=dm
 slack-cli messages:history general --limit=20
 slack-cli thread:read "https://workspace.slack.com/archives/..."
 
-# Search
-slack-cli search "deployment" --in=engineering --from=john
+# Search (options: --in, --from, --after, --before, --sort=recent, --limit=20)
+slack-cli search "deployment" --in=engineering --from=john --limit=10
 
 # Users
 slack-cli users:lookup john
