@@ -16,8 +16,7 @@ class SearchCommand extends BaseSlackCommand
         {--after= : Messages after date (YYYY-MM-DD)}
         {--before= : Messages before date (YYYY-MM-DD)}
         {--sort=recent : Sort by (recent, relevant)}
-        {--limit=20 : Maximum results}
-        {--json : Output as JSON}';
+        {--limit=20 : Maximum results}';
 
     protected $description = 'Search messages';
 

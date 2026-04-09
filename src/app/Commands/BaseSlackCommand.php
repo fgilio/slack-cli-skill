@@ -3,7 +3,7 @@
 namespace App\Commands;
 
 use App\Services\SlackClient;
-use Fgilio\AgentSkillFoundation\Output\OutputsJson;
+use Fgilio\AgentSkillFoundation\Console\AgentCommand;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use LaravelZero\Framework\Commands\Command;
@@ -12,14 +12,14 @@ use RuntimeException;
 /**
  * Base command for all Slack CLI commands.
  *
- * Handles:
- * - JSON output flag
- * - Error formatting (JSON or human-readable)
- * - Auth preflight check with caching
- * - SlackClient injection via constructor
+ * Handles auth preflight, SlackClient injection, and flattens
+ * Illuminate Collections before JSON encoding (via the trait's
+ * prepareJsonData() hook).
  */
 abstract class BaseSlackCommand extends Command
 {
+    use AgentCommand;
+
     protected bool $requiresAuth = true;
 
     public function __construct(protected SlackClient $client)
@@ -29,15 +29,11 @@ abstract class BaseSlackCommand extends Command
 
     public function handle(): int
     {
-        try {
-            if ($this->requiresAuth) {
-                $this->ensureAuthenticated();
-            }
-
-            return $this->doExecute();
-        } catch (RuntimeException $e) {
-            return $this->handleError($e);
+        if ($this->requiresAuth) {
+            $this->ensureAuthenticated();
         }
+
+        return $this->doExecute();
     }
 
     /**
@@ -46,37 +42,15 @@ abstract class BaseSlackCommand extends Command
     abstract protected function doExecute(): int;
 
     /**
-     * Check if JSON output is requested.
+     * Flatten Illuminate Collections to plain arrays before JSON encoding.
      */
-    protected function wantsJson(): bool
-    {
-        return (bool) $this->option('json');
-    }
-
-    /**
-     * Output JSON data.
-     */
-    protected function outputJson(mixed $data): int
+    protected function prepareJsonData(mixed $data): mixed
     {
         if ($data instanceof Collection) {
-            $data = $data->toArray();
+            return $data->toArray();
         }
 
-        return OutputsJson::jsonOkPretty($this, $data);
-    }
-
-    /**
-     * Output error and return failure code.
-     */
-    protected function handleError(RuntimeException $e): int
-    {
-        if ($this->wantsJson()) {
-            fwrite(STDERR, json_encode(['error' => $e->getMessage()], JSON_PRETTY_PRINT)."\n");
-        } else {
-            $this->error($e->getMessage());
-        }
-
-        return self::FAILURE;
+        return $data;
     }
 
     /**

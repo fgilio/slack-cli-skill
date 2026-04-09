@@ -3,11 +3,9 @@
 namespace App\Commands;
 
 use App\Services\SlackClient;
-use Fgilio\AgentSkillFoundation\Output\OutputsJson;
+use Fgilio\AgentSkillFoundation\Console\AgentCommand;
 use LaravelZero\Framework\Commands\Command;
-use RuntimeException;
 
-use function Laravel\Prompts\error;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\password;
 
@@ -19,7 +17,9 @@ use function Laravel\Prompts\password;
  */
 class ConfigCommand extends Command
 {
-    protected $signature = 'config {--json : Output as JSON}';
+    use AgentCommand;
+
+    protected $signature = 'config';
 
     protected $description = 'Show configuration or setup tokens';
 
@@ -37,17 +37,12 @@ class ConfigCommand extends Command
         return $this->showConfig();
     }
 
-    private function wantsJson(): bool
-    {
-        return (bool) $this->option('json');
-    }
-
     private function showConfig(): int
     {
         $config = $this->client->getConfig();
 
         if ($this->wantsJson()) {
-            return OutputsJson::jsonOkPretty($this, $config);
+            return $this->outputJson($config);
         }
 
         $this->line('');
@@ -108,26 +103,15 @@ JS;
 
         $this->client->setTokens($xoxc, $xoxd);
 
-        try {
-            $auth = $this->client->validateAuth();
+        $auth = $this->client->validateAuth();
 
-            $user = $auth->get('user', 'Unknown');
-            $team = $auth->get('team', 'Unknown');
+        $user = $auth->get('user', 'Unknown');
+        $team = $auth->get('team', 'Unknown');
 
-            info("Authenticated as: {$user} @ {$team}");
-            info('Configuration saved to ~/.slack-cli/.env');
-            $this->line('');
+        info("Authenticated as: {$user} @ {$team}");
+        info('Configuration saved to ~/.slack-cli/.env');
+        $this->line('');
 
-            return self::SUCCESS;
-
-        } catch (RuntimeException $e) {
-            error($e->getMessage());
-
-            if ($this->wantsJson()) {
-                fwrite(STDERR, json_encode(['error' => $e->getMessage()], JSON_PRETTY_PRINT)."\n");
-            }
-
-            return self::FAILURE;
-        }
+        return self::SUCCESS;
     }
 }

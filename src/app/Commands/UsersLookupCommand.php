@@ -8,8 +8,7 @@ namespace App\Commands;
 class UsersLookupCommand extends BaseSlackCommand
 {
     protected $signature = 'users:lookup
-        {query : Search query (name, display name, or partial match)}
-        {--json : Output as JSON}';
+        {query : Search query (name, display name, or partial match)}';
 
     protected $description = 'Search for users';
 

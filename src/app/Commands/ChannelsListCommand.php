@@ -9,8 +9,7 @@ class ChannelsListCommand extends BaseSlackCommand
 {
     protected $signature = 'channels:list
         {--type=all : Filter by type (public, private, dm, all)}
-        {--limit=50 : Maximum channels to return}
-        {--json : Output as JSON}';
+        {--limit=50 : Maximum channels to return}';
 
     protected $description = 'List channels';
 

@@ -8,8 +8,7 @@ namespace App\Commands;
 class FilesGetCommand extends BaseSlackCommand
 {
     protected $signature = 'files:get
-        {file : File ID (e.g. F0AK7U1V9PE)}
-        {--json : Output as JSON}';
+        {file : File ID (e.g. F0AK7U1V9PE)}';
 
     protected $description = 'Download a file';
 

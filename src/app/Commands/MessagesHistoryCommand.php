@@ -10,8 +10,7 @@ class MessagesHistoryCommand extends BaseSlackCommand
     protected $signature = 'messages:history
         {channel : Channel name, #name, or ID}
         {--limit=50 : Maximum messages to return}
-        {--sort=newest : Sort order (newest, oldest)}
-        {--json : Output as JSON}';
+        {--sort=newest : Sort order (newest, oldest)}';
 
     protected $description = 'Show channel message history';
 

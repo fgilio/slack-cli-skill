@@ -12,8 +12,7 @@ use RuntimeException;
 class ChannelsInfoCommand extends BaseSlackCommand
 {
     protected $signature = 'channels:info
-        {channel : Channel name, #name, or ID}
-        {--json : Output as JSON}';
+        {channel : Channel name, #name, or ID}';
 
     protected $description = 'Show channel details';
 

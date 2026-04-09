@@ -10,8 +10,7 @@ use RuntimeException;
 class ThreadReadCommand extends BaseSlackCommand
 {
     protected $signature = 'thread:read
-        {url : Slack message or thread URL}
-        {--json : Output as JSON}';
+        {url : Slack message or thread URL}';
 
     protected $description = 'Read a thread from Slack URL';
 

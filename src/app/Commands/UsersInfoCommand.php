@@ -12,8 +12,7 @@ use RuntimeException;
 class UsersInfoCommand extends BaseSlackCommand
 {
     protected $signature = 'users:info
-        {user : User ID, @name, or display name}
-        {--json : Output as JSON}';
+        {user : User ID, @name, or display name}';
 
     protected $description = 'Show user details';
 
