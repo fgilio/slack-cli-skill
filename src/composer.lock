@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "9edf720714467dda106117fc3fe286e5",
+    "content-hash": "2cc1557c5f0b80fe4fc982fd5883e1c6",
     "packages": [
         {
             "name": "carbonphp/carbon-doctrine-types",
@@ -77,16 +77,16 @@
         },
         {
             "name": "fgilio/agent-skill-foundation",
-            "version": "v0.5.4",
+            "version": "v0.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/fgilio/agent-skill-foundation",
-                "reference": "8245deddd0f07fdf43d9cc7fa157fc15551e4ecb"
+                "reference": "efd8758424bf7adef51793649572c1b269d3735a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/fgilio/agent-skill-foundation/zipball/8245deddd0f07fdf43d9cc7fa157fc15551e4ecb",
-                "reference": "8245deddd0f07fdf43d9cc7fa157fc15551e4ecb",
+                "url": "https://api.github.com/repos/fgilio/agent-skill-foundation/zipball/efd8758424bf7adef51793649572c1b269d3735a",
+                "reference": "efd8758424bf7adef51793649572c1b269d3735a",
                 "shasum": ""
             },
             "require": {
@@ -133,7 +133,7 @@
                 "routing",
                 "skills"
             ],
-            "time": "2026-03-12T12:29:23+00:00"
+            "time": "2026-04-09T05:29:49+00:00"
         },
         {
             "name": "filp/whoops",
