@@ -1,3 +1,28 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:a82ad4356dcfb99130ddff29f649bb7d7d3825791ed1776742ecf1dc1626f75c
-size 527
+#!/usr/bin/env php
+<?php
+
+define('LARAVEL_START', microtime(true));
+
+$autoloader = require file_exists(__DIR__.'/vendor/autoload.php')
+    ? __DIR__.'/vendor/autoload.php'
+    : __DIR__.'/../../autoload.php';
+
+$app = require_once __DIR__.'/bootstrap/app.php';
+
+$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+
+try {
+    $status = $kernel->handle(
+        $input = new Symfony\Component\Console\Input\ArgvInput,
+        new Symfony\Component\Console\Output\ConsoleOutput
+    );
+} catch (Throwable $e) {
+    if (Fgilio\AgentSkillFoundation\Console\JsonExceptionRenderer::render($e)) {
+        exit(Fgilio\AgentSkillFoundation\Console\JsonExceptionRenderer::exitCode($e));
+    }
+    throw $e;
+}
+
+$kernel->terminate($input, $status);
+
+exit($status);
