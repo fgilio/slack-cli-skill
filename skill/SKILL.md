@@ -12,22 +12,21 @@ Read-only Slack CLI. Access DMs, private channels, and everything you can see in
 
 ## Execution
 
-`slack-cli` is a self-contained binary available on PATH.
-Run it directly - never prefix with `bun`, `node`, `php`, or any runtime.
+`slack-cli` is a self-contained binary available on PATH. Run it directly - never prefix with `bun`, `node`, `php`, or any runtime.
 
 ## Quick Reference
 
-| Command | Purpose |
-|---------|---------|
-| `slack-cli config` | Setup/show tokens |
-| `slack-cli channels:list` | List channels |
-| `slack-cli channels:info <channel>` | Channel details + members |
-| `slack-cli messages:history <channel>` | Read messages |
-| `slack-cli thread:read <url>` | Read thread from URL |
-| `slack-cli search <query>` | Search messages |
-| `slack-cli users:lookup <query>` | Find users |
-| `slack-cli users:info <user>` | User details |
-| `slack-cli files:get <file-id>` | Download a file |
+| Command                                | Purpose                   |
+| -------------------------------------- | ------------------------- |
+| `slack-cli config`                     | Setup/show tokens         |
+| `slack-cli channels:list`              | List channels             |
+| `slack-cli channels:info <channel>`    | Channel details + members |
+| `slack-cli messages:history <channel>` | Read messages             |
+| `slack-cli thread:read <url>`          | Read thread from URL      |
+| `slack-cli search <query>`             | Search messages           |
+| `slack-cli users:lookup <query>`       | Find users                |
+| `slack-cli users:info <user>`          | User details              |
+| `slack-cli files:get <file-id>`        | Download a file           |
 
 ## Example Prompts
 

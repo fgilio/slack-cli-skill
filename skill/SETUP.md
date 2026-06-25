@@ -8,6 +8,7 @@
 ```
 
 Or manually:
+
 ```bash
 ln -sf $AGENT_HOME/skills/slack-cli/slack-cli ~/.local/bin/slack-cli
 ```
