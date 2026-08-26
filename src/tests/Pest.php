@@ -1,7 +1,5 @@
 <?php
 
-use Tests\TestCase;
-
 /*
 |--------------------------------------------------------------------------
 | Test Case
@@ -13,7 +11,8 @@ use Tests\TestCase;
 |
 */
 
-uses(TestCase::class)->in('Feature');
+// The binary drops illuminate/testing to stay small, so the suite runs on
+// plain PHPUnit test cases rather than booting the console application.
 
 /*
 |--------------------------------------------------------------------------

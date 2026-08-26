@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Generator;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -25,6 +26,14 @@ class SlackClient
     private const AUTH_CACHE_TTL = 600; // 10 minutes
 
     private const USER_CACHE_TTL = 3600; // 1 hour
+
+    private const PAGE_SIZE = 200;
+
+    /**
+     * An archive run can span thousands of calls, so it rides out far more
+     * rate limiting than a one-shot command would ever meet.
+     */
+    private const ARCHIVE_RETRIES = 10;
 
     private ?string $xoxc = null;
 
@@ -76,6 +85,28 @@ class SlackClient
         return $response;
     }
 
+    public function getWorkspaceName(): string
+    {
+        return (string) ($this->validateAuth()->get('team') ?: 'slack');
+    }
+
+    /**
+     * The timezone Slack shows the signed-in user, so an archive reads
+     * in the same clock the conversation happened in.
+     */
+    public function getAuthenticatedUserTimezone(): ?string
+    {
+        $userId = $this->validateAuth()->get('user_id');
+
+        if (! is_string($userId)) {
+            return null;
+        }
+
+        $tz = $this->getUserInfo($userId)?->get('tz');
+
+        return is_string($tz) && $tz !== '' ? $tz : null;
+    }
+
     public function clearAuthCache(): void
     {
         $this->deleteCacheValue('slack:auth:validated');
@@ -124,6 +155,39 @@ class SlackClient
 
         // Resolve all member IDs to user info
         return $memberIds->map(fn ($id) => $this->getUserInfo($id) ?? collect(['id' => $id]));
+    }
+
+    /**
+     * Resolve anything a person might type into a conversation ID.
+     *
+     * Accepts a raw ID, a #channel-name, or a @username. A username
+     * resolves to the DM you share with that person.
+     */
+    public function resolveConversationId(string $identifier): string
+    {
+        if (str_starts_with($identifier, '@')) {
+            return $this->openDirectMessage($this->resolveUserId($identifier));
+        }
+
+        return $this->resolveChannelId($identifier);
+    }
+
+    public function openDirectMessage(string $userId): string
+    {
+        $response = $this->request('conversations.open', [
+            'users' => $userId,
+            'return_im' => true,
+        ]);
+
+        $this->ensureOk($response, 'conversations.open');
+
+        $channelId = Arr::get($response, 'channel.id');
+
+        if (! is_string($channelId)) {
+            throw new RuntimeException("Unable to open a DM with user: {$userId}");
+        }
+
+        return $channelId;
     }
 
     public function resolveChannelId(string $identifier): string
@@ -178,6 +242,68 @@ class SlackClient
         }
 
         return $messages;
+    }
+
+    /**
+     * Walk a channel's history one page at a time.
+     *
+     * Slack returns pages newest first. Each yielded page carries the
+     * cursor that follows it so a caller can checkpoint after flushing
+     * the page to disk.
+     *
+     * @return Generator<int, array{messages: array<int, array<string, mixed>>, next_cursor: ?string}>
+     */
+    public function historyPages(string $channelId, ?string $oldest = null, ?string $latest = null, ?string $cursor = null): Generator
+    {
+        do {
+            $params = array_filter([
+                'channel' => $channelId,
+                'limit' => self::PAGE_SIZE,
+                'inclusive' => true,
+                'oldest' => $oldest,
+                'latest' => $latest,
+                'cursor' => $cursor,
+            ], fn ($value) => $value !== null);
+
+            $response = $this->request('conversations.history', $params, self::ARCHIVE_RETRIES);
+
+            $this->ensureOk($response, 'conversations.history');
+
+            $cursor = Arr::get($response, 'response_metadata.next_cursor') ?: null;
+
+            yield [
+                'messages' => $response->get('messages', []),
+                'next_cursor' => $cursor,
+            ];
+        } while ($cursor !== null);
+    }
+
+    /**
+     * Walk a thread's replies one page at a time.
+     *
+     * @return Generator<int, array{messages: array<int, array<string, mixed>>, next_cursor: ?string}>
+     */
+    public function repliesPages(string $channelId, string $threadTs, ?string $cursor = null): Generator
+    {
+        do {
+            $params = array_filter([
+                'channel' => $channelId,
+                'ts' => $threadTs,
+                'limit' => self::PAGE_SIZE,
+                'cursor' => $cursor,
+            ], fn ($value) => $value !== null);
+
+            $response = $this->request('conversations.replies', $params, self::ARCHIVE_RETRIES);
+
+            $this->ensureOk($response, 'conversations.replies');
+
+            $cursor = Arr::get($response, 'response_metadata.next_cursor') ?: null;
+
+            yield [
+                'messages' => $response->get('messages', []),
+                'next_cursor' => $cursor,
+            ];
+        } while ($cursor !== null);
     }
 
     /** @return Collection<int, array<string, mixed>> */
@@ -689,7 +815,7 @@ class SlackClient
      * @param  array<string, mixed>  $params
      * @return Collection<string, mixed>
      */
-    private function request(string $method, array $params = []): Collection
+    private function request(string $method, array $params = [], int $retries = 3): Collection
     {
         $this->ensureConfigured();
 
@@ -698,7 +824,7 @@ class SlackClient
                 'Authorization' => 'Bearer '.$this->xoxc,
             ])
             ->withCookies(['d' => $this->xoxd], 'slack.com')
-            ->retry(3, function (int $attempt, \Throwable $exception) {
+            ->retry($retries, function (int $attempt, \Throwable $exception) {
                 $response = $exception instanceof RequestException
                     ? $exception->response
                     : null;
@@ -754,6 +880,18 @@ class SlackClient
         } while ($cursor && $results->count() < $limit);
 
         return $results->take($limit);
+    }
+
+    /**
+     * @param  Collection<string, mixed>  $response
+     */
+    private function ensureOk(Collection $response, string $method): void
+    {
+        if ($response->get('ok')) {
+            return;
+        }
+
+        throw new RuntimeException("Slack rejected {$method}: ".$response->get('error', 'unknown error'));
     }
 
     private function ensureConfigured(): void

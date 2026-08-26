@@ -27,8 +27,10 @@ Build and install to skill root:
 ## Testing
 
 ```bash
-./vendor/bin/pest
+composer test
 ```
+
+The suite runs on plain PHPUnit test cases: the binary drops `illuminate/testing` to stay small, so nothing here boots the console application.
 
 ## License
 

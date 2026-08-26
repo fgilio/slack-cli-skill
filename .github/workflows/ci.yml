@@ -27,6 +27,16 @@ jobs:
       - run: cd src && composer install --no-progress
       - run: cd src && composer test:types
 
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.5"
+      - run: cd src && composer install --no-progress
+      - run: cd src && composer test
+
   format:
     runs-on: ubuntu-latest
     steps:
