@@ -29,7 +29,12 @@ final class ArchiveRequest
 
     public function checkpointPath(): string
     {
-        return $this->outDir.'/.archive-checkpoint.json';
+        return self::checkpointPathIn($this->outDir);
+    }
+
+    public static function checkpointPathIn(string $outDir): string
+    {
+        return $outDir.'/.archive-checkpoint.json';
     }
 
     public function workDir(): string

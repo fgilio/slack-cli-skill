@@ -6,41 +6,6 @@ use App\Archive\ChannelArchiver;
 use App\Archive\Jsonl;
 use Tests\Support\FakeSlackClient;
 
-// 1785575640 is 2026-08-01 09:14:00 UTC.
-const TS_0914 = '1785575640.000100';
-const TS_0920 = '1785576000.000200';
-const TS_0930 = '1785576600.000300';
-const TS_NEXT_DAY = '1785665100.000400';
-const TS_LATER = '1785668700.000500';
-
-function archiveDir(): string
-{
-    $dir = sys_get_temp_dir().'/slack-cli-run-'.bin2hex(random_bytes(6));
-    mkdir($dir, 0755, true);
-
-    return $dir;
-}
-
-function fixtureClient(): FakeSlackClient
-{
-    return new FakeSlackClient(
-        pages: [
-            [['ts' => TS_NEXT_DAY, 'user' => 'U01', 'text' => 'seguimos mañana']],
-            [
-                ['ts' => TS_0930, 'user' => 'U02', 'text' => 'listo'],
-                ['ts' => TS_0914, 'user' => 'U01', 'text' => '¿arrancamos?', 'thread_ts' => TS_0914, 'reply_count' => 1],
-            ],
-        ],
-        threads: [
-            TS_0914 => [
-                ['ts' => TS_0914, 'user' => 'U01', 'text' => '¿arrancamos?'],
-                ['ts' => TS_0920, 'user' => 'U02', 'text' => 'dale'],
-            ],
-        ],
-        users: ['U01' => 'Franco Gilio', 'U02' => 'Ana Pérez'],
-    );
-}
-
 function archiveRequest(string $dir, array $overrides = []): ArchiveRequest
 {
     return new ArchiveRequest(

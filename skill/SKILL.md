@@ -16,23 +16,25 @@ Read-only Slack CLI. Access DMs, private channels, and everything you can see in
 
 ## Quick Reference
 
-| Command                                | Purpose                   |
-| -------------------------------------- | ------------------------- |
-| `slack-cli config`                     | Setup/show tokens         |
-| `slack-cli channels:list`              | List channels             |
-| `slack-cli channels:info <channel>`    | Channel details + members |
-| `slack-cli messages:history <channel>` | Read messages             |
-| `slack-cli archive <target>`           | Dump a whole conversation |
-| `slack-cli thread:read <url>`          | Read thread from URL      |
-| `slack-cli search <query>`             | Search messages           |
-| `slack-cli users:lookup <query>`       | Find users                |
-| `slack-cli users:info <user>`          | User details              |
-| `slack-cli files:get <file-id>`        | Download a file           |
+| Command                                | Purpose                       |
+| -------------------------------------- | ----------------------------- |
+| `slack-cli config`                     | Setup/show tokens             |
+| `slack-cli channels:list`              | List channels                 |
+| `slack-cli channels:info <channel>`    | Channel details + members     |
+| `slack-cli messages:history <channel>` | Read messages                 |
+| `slack-cli archive <target>`           | Dump a whole conversation     |
+| `slack-cli archive:batch <manifest>`   | Refresh many archives at once |
+| `slack-cli thread:read <url>`          | Read thread from URL          |
+| `slack-cli search <query>`             | Search messages               |
+| `slack-cli users:lookup <query>`       | Find users                    |
+| `slack-cli users:info <user>`          | User details                  |
+| `slack-cli files:get <file-id>`        | Download a file               |
 
 ## Example Prompts
 
 - "Read the last 20 messages in #engineering"
 - "Archive the last year of #eng-leadership to ./archive"
+- "Refresh every Slack archive in my team repo"
 - "Summarize this Slack thread: [paste URL]"
 - "Search Slack for messages about deployment from john"
 - "Who is in the #frontend channel?"
@@ -60,6 +62,9 @@ slack-cli thread:read "https://workspace.slack.com/archives/..."
 slack-cli archive '#eng-leadership' --after=2026-01-01 --before=2026-08-26 --out=./eng-leadership
 slack-cli archive @nacho --out=./dm-nacho
 slack-cli archive '#eng-leadership' --since-last --out=./eng-leadership
+
+# Refresh every archive listed in a manifest (see Batches below)
+slack-cli archive:batch ~/pla/team/slack-archives.json --since-last
 
 # Search (options: --in, --from, --after, --before, --sort=recent, --limit=20)
 slack-cli search "deployment" --in=engineering --from=john --limit=10
@@ -114,6 +119,64 @@ Horarios en Europe/London .
 Every page that reaches disk updates `.archive-checkpoint.json` in the output directory. If a run is interrupted, rerun the same command with `--resume` and it picks up at the page it was about to fetch. Without `--resume` it refuses to touch a directory that holds a checkpoint, or one that already holds a finished archive.
 
 `--since-last` is the refresh path: it reads the newest message already in `messages.jsonl` and fetches only what came after, appending to both files and moving the header's closing date forward. History is never rewritten, which means replies posted to an old thread after that thread was archived do not come back. Re-archive into a clean directory when you need them.
+
+Every finished run also drops an `.archive-meta.json` naming the channel the directory holds, which is what lets `archive:batch --init` rebuild a manifest later.
+
+## Batches
+
+Keeping a whole tree of archives current one command at a time is a chore. `archive:batch` reads a manifest and walks it.
+
+```bash
+slack-cli archive:batch ~/pla/team/slack-archives.json --since-last
+```
+
+The manifest is a JSON array. Each entry needs a `target` (whatever the single `archive` command accepts) and an `out` (an absolute path, or one starting with `~`), and may carry `after`, `before`, and `no_threads`.
+
+```json
+[
+  { "target": "@gparra", "out": "~/pla/team/People/Gonza/Slack-DM" },
+  { "target": "engineering-team", "out": "~/pla/team/Equipo/Slack/engineering-team", "after": "2025-08-25" },
+  { "target": "C0123ABCD", "out": "~/notes/slack/product-sync", "no_threads": true }
+]
+```
+
+| Option | What it does |
+| --- | --- |
+| `--since-last` | Apply the refresh path to every entry. Each directory has its own history, so each one picks up where it left off. |
+| `--only=<glob>` | Archive only the entries whose target or output directory name matches. A bare word matches anywhere, so `--only=gparra` finds `@gparra`. |
+| `--init` | Print a manifest built from the archives already sitting in the given directories, rather than archiving anything. |
+| `--json` | Emit the summary as JSON instead of a table. |
+| `-v` | Show each entry's page-by-page progress under its line. |
+
+Entries run one at a time, in manifest order, because Slack rate limits per workspace. The whole manifest is validated before the first call goes out, so a typo in the last entry surfaces in a second rather than forty minutes in. An entry that fails is recorded and the batch moves on to the next one.
+
+```
+[1/3] @gparra → Slack-DM ... 128 messages, 34 replies appended
+[2/3] engineering-team → engineering-team ... up to date
+[3/3] design-team → design-team ... FAILED: Channel not found. Check the name or ID
+
++------------------+------------------+----------+---------+---------+------------+
+| Target           | Out              | Messages | Replies | Threads | Status     |
++------------------+------------------+----------+---------+---------+------------+
+| @gparra          | Slack-DM         | 128      | 34      | 12      | archived   |
+| engineering-team | engineering-team | 0        | 0       | 0       | up to date |
+| design-team      | design-team      | 0        | 0       | 0       | failed     |
++------------------+------------------+----------+---------+---------+------------+
+```
+
+The exit code is 0 when every entry worked and 1 when any of them did not.
+
+`--since-last` beats an entry's own `after`: the run starts from whichever of the two sits later, the same way the single command resolves it. A directory an interrupted batch left mid-run is picked up and continued, so a batch that dies partway needs no flag to finish.
+
+### Building a manifest from what you already have
+
+```bash
+slack-cli archive:batch --init ~/pla/team ~/notes > ~/pla/team/slack-archives.json
+```
+
+`--init` walks the directories you give it, finds every archive (any directory holding a `messages.jsonl`), and prints a manifest to stdout. Targets come from the `.archive-meta.json` a run leaves behind, and fall back to the channel name in the title line of `raw.md`.
+
+A DM's title line holds a person's real name rather than the `@handle` Slack takes back, so those entries come out with `"target": "FIXME"` and a note on stderr saying which directory needs a hand. Fix them up and the manifest is ready.
 
 ## Notes
 

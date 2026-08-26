@@ -4,9 +4,8 @@ namespace App\Commands;
 
 use App\Archive\ArchiveRequest;
 use App\Archive\ChannelArchiver;
-use DateTimeImmutable;
+use App\Archive\DayBoundary;
 use DateTimeZone;
-use RuntimeException;
 
 /**
  * Archive a whole conversation to disk.
@@ -41,8 +40,8 @@ class ArchiveCommand extends BaseSlackCommand
         $request = new ArchiveRequest(
             channelId: $this->client->resolveConversationId((string) $this->argument('target')),
             outDir: rtrim($outDir, '/'),
-            oldest: $this->dayStart($this->option('after'), $timezone),
-            latest: $this->dayEnd($this->option('before'), $timezone),
+            oldest: DayBoundary::start($this->option('after'), $timezone),
+            latest: DayBoundary::end($this->option('before'), $timezone),
             includeThreads: ! $this->option('no-threads'),
             resume: (bool) $this->option('resume'),
             sinceLast: (bool) $this->option('since-last'),
@@ -76,35 +75,5 @@ class ArchiveCommand extends BaseSlackCommand
         return new DateTimeZone(
             $this->client->getAuthenticatedUserTimezone() ?? date_default_timezone_get()
         );
-    }
-
-    /**
-     * Slack timestamps are seconds with a microsecond suffix. A day boundary
-     * is taken in the archiving user's own timezone so --after=2026-08-01
-     * means the day they lived, not the day UTC lived.
-     */
-    private function dayStart(mixed $day, DateTimeZone $timezone): ?string
-    {
-        return $this->boundary($day, $timezone, '00:00:00', '.000000');
-    }
-
-    private function dayEnd(mixed $day, DateTimeZone $timezone): ?string
-    {
-        return $this->boundary($day, $timezone, '23:59:59', '.999999');
-    }
-
-    private function boundary(mixed $day, DateTimeZone $timezone, string $time, string $fraction): ?string
-    {
-        if (! is_string($day) || $day === '') {
-            return null;
-        }
-
-        $moment = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', "{$day} {$time}", $timezone);
-
-        if ($moment === false || $moment->format('Y-m-d') !== $day) {
-            throw new RuntimeException("Unable to read the date '{$day}'. Use the YYYY-MM-DD format");
-        }
-
-        return $moment->format('U').$fraction;
     }
 }

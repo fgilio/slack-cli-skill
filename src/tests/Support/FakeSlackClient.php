@@ -5,6 +5,7 @@ namespace Tests\Support;
 use App\Services\SlackClient;
 use Generator;
 use Illuminate\Support\Collection;
+use RuntimeException;
 
 /**
  * A Slack client backed by fixtures.
@@ -52,6 +53,25 @@ final class FakeSlackClient extends SlackClient
     public function repliesPages(string $channelId, string $threadTs, ?string $cursor = null): Generator
     {
         yield ['messages' => $this->threads[$threadTs] ?? [], 'next_cursor' => null];
+    }
+
+    public function isConfigured(): bool
+    {
+        return true;
+    }
+
+    public function validateAuth(): Collection
+    {
+        return collect(['ok' => true, 'user' => 'fgilio', 'team' => 'publica.la']);
+    }
+
+    public function resolveConversationId(string $identifier): string
+    {
+        throw_if($identifier === 'missing', RuntimeException::class, 'Channel not found. Check the name or ID');
+
+        return str_starts_with($identifier, '@')
+            ? 'D'.strtoupper(substr($identifier, 1))
+            : 'C47JM9E9K';
     }
 
     public function getChannelInfo(string $channel): ?Collection
