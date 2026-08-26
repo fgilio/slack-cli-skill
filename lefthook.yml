@@ -39,6 +39,6 @@ pre-push:
   commands:
     phpstan:
       root: "src/"
-      run: "if command -v herd &>/dev/null; then herd php vendor/bin/phpstan analyse --memory-limit=512M; else composer test:types; fi"
+      run: "if command -v php85 &>/dev/null; then php85 vendor/bin/phpstan analyse --memory-limit=512M; else composer test:types; fi"
     php-cli-skill-validate:
       run: "php-cli-skill-validate slack-cli"
