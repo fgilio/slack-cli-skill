@@ -170,6 +170,17 @@ final class ChannelArchiver
 
     private function fetchHistory(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, Closure $progress): void
     {
+        // conversations.history reads a null cursor as "start from the newest
+        // message", so a checkpoint that holds pages but no cursor has already
+        // reached the end of the channel. Handing that null back to Slack walks
+        // the whole conversation a second time and stacks it on top of the
+        // pages already on disk, which the ordering pass then interleaves.
+        if ($checkpoint->pageCount > 0 && $checkpoint->cursor === null) {
+            $this->finishHistory($checkpoint);
+
+            return;
+        }
+
         $pages = $this->client->historyPages(
             $request->channelId,
             $this->effectiveOldest($checkpoint),
@@ -187,11 +198,24 @@ final class ChannelArchiver
 
             $checkpoint->pageCount++;
             $checkpoint->cursor = $page['next_cursor'];
+
+            // The phase moves on in the same write that records the final
+            // page, so a run killed here never leaves a checkpoint that says
+            // it is still fetching with no cursor to fetch from.
+            if ($checkpoint->cursor === null) {
+                $checkpoint->phase = ArchiveCheckpoint::PHASE_ORDER;
+            }
+
             $checkpoint->save();
 
             $progress(sprintf('Fetched page %d (%d messages).', $checkpoint->pageCount, count($messages)));
         }
 
+        $this->finishHistory($checkpoint);
+    }
+
+    private function finishHistory(ArchiveCheckpoint $checkpoint): void
+    {
         $checkpoint->phase = ArchiveCheckpoint::PHASE_ORDER;
         $checkpoint->cursor = null;
         $checkpoint->save();
@@ -211,7 +235,17 @@ final class ChannelArchiver
         $paths = [];
 
         for ($index = 0; $index < $checkpoint->pageCount; $index++) {
-            $paths[] = $this->pagePath($request, $index);
+            $path = $this->pagePath($request, $index);
+
+            // The concat pass skips what it cannot read, so a page that went
+            // missing would drop its messages without a word.
+            throw_unless(
+                is_file($path),
+                RuntimeException::class,
+                "The archive run in {$request->outDir} is missing page {$index} of {$checkpoint->pageCount}. Delete {$request->checkpointPath()} and archive the channel again",
+            );
+
+            $paths[] = $path;
         }
 
         $ordered = Jsonl::concatReverse($paths, $this->historyPath($request).'.part');
@@ -381,6 +415,15 @@ final class ChannelArchiver
 
                 continue;
             }
+
+            // The ordered stream only ever moves forward. A step backwards
+            // means the pages were assembled wrong, and writing it out would
+            // hand back a scrambled archive under a successful exit code.
+            throw_if(
+                $lastTs !== null && (float) $ts < (float) $lastTs,
+                RuntimeException::class,
+                "The archive in {$request->outDir} came out in the wrong order at ts {$ts}. Delete the directory and archive the channel again",
+            );
 
             $lastTs = $ts;
             $replies = $this->repliesFor($request, $message);
