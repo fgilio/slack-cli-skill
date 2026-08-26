@@ -1,5 +1,7 @@
 <?php
 
+use App\Archive\ArchiveRequest;
+use App\Archive\Jsonl;
 use Tests\Support\FakeSlackClient;
 
 /*
@@ -55,6 +57,98 @@ function archiveDir(): string
     mkdir($dir, 0755, true);
 
     return $dir;
+}
+
+/**
+ * Ten messages an hour apart, dealt into five pages the way
+ * conversations.history delivers them: newest page first, newest message
+ * first inside each page.
+ *
+ * @return list<list<array<string, mixed>>>
+ */
+function pagedFixture(): array
+{
+    $messages = [];
+
+    for ($step = 9; $step >= 0; $step--) {
+        $messages[] = [
+            'ts' => (string) (1785575640 + $step * 3600).'.000100',
+            'user' => 'U01',
+            'text' => "mensaje {$step}",
+        ];
+    }
+
+    return array_chunk($messages, 2);
+}
+
+function pagedClient(?int $crashAfterPages = null, bool $forwardWhenFloored = true): FakeSlackClient
+{
+    return new FakeSlackClient(
+        pages: pagedFixture(),
+        users: ['U01' => 'Franco Gilio'],
+        crashAfterPages: $crashAfterPages,
+        forwardWhenFloored: $forwardWhenFloored,
+    );
+}
+
+function resumeRequest(string $dir, bool $resume = false, ?string $oldest = null): ArchiveRequest
+{
+    return new ArchiveRequest(
+        channelId: 'C47JM9E9K',
+        outDir: $dir,
+        oldest: $oldest,
+        resume: $resume,
+    );
+}
+
+/**
+ * @return list<string>
+ */
+function archivedTimestamps(string $dir): array
+{
+    return array_column(iterator_to_array(Jsonl::read($dir.'/messages.jsonl')), 'ts');
+}
+
+/**
+ * The timestamps of the channel's own messages, with thread replies left
+ * out: a reply is written under its parent and so runs behind it by design.
+ *
+ * @return list<string>
+ */
+function topLevelTimestamps(string $dir): array
+{
+    $timestamps = [];
+
+    foreach (Jsonl::read($dir.'/messages.jsonl') as $message) {
+        $ts = (string) ($message['ts'] ?? '');
+        $threadTs = $message['thread_ts'] ?? null;
+
+        if (is_string($threadTs) && $threadTs !== $ts) {
+            continue;
+        }
+
+        $timestamps[] = $ts;
+    }
+
+    return $timestamps;
+}
+
+/**
+ * How many times a list of timestamps steps backwards.
+ *
+ * @param  list<string>  $timestamps
+ */
+function orderInversions(array $timestamps): int
+{
+    $inversions = 0;
+
+    for ($index = 1; $index < count($timestamps); $index++) {
+        if (Jsonl::compareTimestamps($timestamps[$index], $timestamps[$index - 1]) < 0) {
+            $inversions++;
+        }
+    }
+
+    return $inversions;
 }
 
 /**

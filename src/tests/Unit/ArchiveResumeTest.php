@@ -1,54 +1,8 @@
 <?php
 
 use App\Archive\ArchiveCheckpoint;
-use App\Archive\ArchiveRequest;
 use App\Archive\ChannelArchiver;
 use App\Archive\Jsonl;
-use Tests\Support\FakeSlackClient;
-
-/**
- * Ten messages an hour apart, dealt into five pages the way
- * conversations.history delivers them: newest page first, newest message
- * first inside each page.
- *
- * @return list<list<array<string, mixed>>>
- */
-function pagedFixture(): array
-{
-    $messages = [];
-
-    for ($step = 9; $step >= 0; $step--) {
-        $messages[] = [
-            'ts' => (string) (1785575640 + $step * 3600).'.000100',
-            'user' => 'U01',
-            'text' => "mensaje {$step}",
-        ];
-    }
-
-    return array_chunk($messages, 2);
-}
-
-function pagedClient(?int $crashAfterPages = null): FakeSlackClient
-{
-    return new FakeSlackClient(
-        pages: pagedFixture(),
-        users: ['U01' => 'Franco Gilio'],
-        crashAfterPages: $crashAfterPages,
-    );
-}
-
-function resumeRequest(string $dir, bool $resume = false): ArchiveRequest
-{
-    return new ArchiveRequest(channelId: 'C47JM9E9K', outDir: $dir, resume: $resume);
-}
-
-/**
- * @return list<string>
- */
-function archivedTimestamps(string $dir): array
-{
-    return array_column(iterator_to_array(Jsonl::read($dir.'/messages.jsonl')), 'ts');
-}
 
 /**
  * What a single uninterrupted run of the same fixture writes.
@@ -88,6 +42,27 @@ function plantInterruptedRun(string $dir, array $pages, string $phase, ?string $
     $checkpoint->cursor = $cursor;
     $checkpoint->pageCount = $pageCount ?? count($pages);
     $checkpoint->save();
+}
+
+/**
+ * The planted page files, newest slice first, the way the fixture is dealt.
+ *
+ * @return list<string>
+ */
+function plantedPagePaths(string $dir): array
+{
+    return array_map(
+        fn (int $index) => sprintf('%s/.archive-tmp/pages/page-%06d.jsonl', $dir, $index),
+        range(0, count(pagedFixture()) - 1),
+    );
+}
+
+/**
+ * The ordered stream the phases before `threads` would have left behind.
+ */
+function plantOrderedHistory(string $dir): void
+{
+    Jsonl::concat(array_reverse(plantedPagePaths($dir)), $dir.'/.archive-tmp/history.jsonl');
 }
 
 it('deals the fixture out newest page first', function () {
@@ -198,10 +173,7 @@ it('resumes a run killed part way through the thread pass', function () {
 
     $again = archiveDir();
     plantInterruptedRun($again, pagedFixture(), ArchiveCheckpoint::PHASE_THREADS, cursor: null);
-    Jsonl::concatReverse(
-        array_map(fn (int $i) => sprintf('%s/.archive-tmp/pages/page-%06d.jsonl', $again, $i), range(0, 4)),
-        $again.'/.archive-tmp/history.jsonl',
-    );
+    plantOrderedHistory($again);
 
     $checkpoint = ArchiveCheckpoint::load($again.'/.archive-checkpoint.json');
     $checkpoint->threadLine = 4;
@@ -219,10 +191,7 @@ it('resumes a run killed part way through rendering', function () {
     $dir = archiveDir();
 
     plantInterruptedRun($dir, pagedFixture(), ArchiveCheckpoint::PHASE_THREADS, cursor: null);
-    Jsonl::concatReverse(
-        array_map(fn (int $i) => sprintf('%s/.archive-tmp/pages/page-%06d.jsonl', $dir, $i), range(0, 4)),
-        $dir.'/.archive-tmp/history.jsonl',
-    );
+    plantOrderedHistory($dir);
 
     $checkpoint = ArchiveCheckpoint::load($dir.'/.archive-checkpoint.json');
     $checkpoint->phase = ArchiveCheckpoint::PHASE_RENDER;
@@ -293,10 +262,9 @@ it('refuses to render a stream that runs backwards', function () {
 
     plantInterruptedRun($dir, pagedFixture(), ArchiveCheckpoint::PHASE_THREADS, cursor: null);
 
-    // Pages concatenated the wrong way round, which is what the old resume
-    // path produced: each block ordered, the blocks themselves not.
-    $pages = array_map(fn (int $i) => sprintf('%s/.archive-tmp/pages/page-%06d.jsonl', $dir, $i), range(0, 4));
-    Jsonl::concatReverse(array_reverse($pages), $dir.'/.archive-tmp/history.jsonl');
+    // Pages joined newest slice first, which is what a floored run used to
+    // produce: each block ordered, the blocks themselves not.
+    Jsonl::concat(plantedPagePaths($dir), $dir.'/.archive-tmp/history.jsonl');
 
     expect(fn () => (new ChannelArchiver(pagedClient()))->archive(resumeRequest($dir, resume: true)))
         ->toThrow(RuntimeException::class, 'came out in the wrong order');

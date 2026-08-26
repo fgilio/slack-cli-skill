@@ -29,15 +29,15 @@ function writePage(string $dir, int $index, array $messages): string
     return $path;
 }
 
-it('replays newest-first pages into one oldest-first file', function () {
+it('joins page files in the order it is handed them', function () {
     $dir = tempArchiveDir();
 
     $pages = [
-        writePage($dir, 0, [['ts' => '30'], ['ts' => '40']]),
         writePage($dir, 1, [['ts' => '10'], ['ts' => '20']]),
+        writePage($dir, 0, [['ts' => '30'], ['ts' => '40']]),
     ];
 
-    $written = Jsonl::concatReverse($pages, $dir.'/history.jsonl');
+    $written = Jsonl::concat($pages, $dir.'/history.jsonl');
 
     $order = array_column(iterator_to_array(Jsonl::read($dir.'/history.jsonl')), 'ts');
 
@@ -50,7 +50,15 @@ it('skips page files a run never got to write', function () {
 
     $pages = [writePage($dir, 0, [['ts' => '30']]), $dir.'/page-000001.jsonl'];
 
-    expect(Jsonl::concatReverse($pages, $dir.'/history.jsonl'))->toBe(1);
+    expect(Jsonl::concat($pages, $dir.'/history.jsonl'))->toBe(1);
+});
+
+it('reads the opening timestamp without walking the whole file', function () {
+    $dir = tempArchiveDir();
+    $path = writePage($dir, 0, [['ts' => '10.5'], ['ts' => '20.5']]);
+
+    expect(Jsonl::firstTimestamp($path))->toBe('10.5')
+        ->and(Jsonl::firstTimestamp($dir.'/nothing.jsonl'))->toBeNull();
 });
 
 it('leaves no partial file behind when a write finishes', function () {

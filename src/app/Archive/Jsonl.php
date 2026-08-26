@@ -54,15 +54,61 @@ final class Jsonl
     }
 
     /**
-     * Concatenate page files in reverse index order into one ascending file.
+     * Order two Slack timestamps.
      *
-     * conversations.history walks a channel newest first, so page 0 holds
-     * the newest slice. Replaying the pages backwards yields oldest first
-     * without ever sorting in memory.
-     *
-     * @param  list<string>  $pagePaths  Ordered newest page first.
+     * Comparing them as floats loses the microsecond suffix that makes two
+     * messages in the same second distinct, so the seconds and the fraction
+     * are compared apart.
      */
-    public static function concatReverse(array $pagePaths, string $destination): int
+    public static function compareTimestamps(string $a, string $b): int
+    {
+        return self::splitTimestamp($a) <=> self::splitTimestamp($b);
+    }
+
+    /**
+     * @return array{0: int, 1: string}
+     */
+    private static function splitTimestamp(string $ts): array
+    {
+        $parts = explode('.', $ts, 2);
+
+        return [(int) $parts[0], str_pad($parts[1] ?? '', 6, '0')];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $messages
+     * @return list<array<string, mixed>>
+     */
+    public static function sortByTimestamp(array $messages): array
+    {
+        usort($messages, fn (array $a, array $b) => self::compareTimestamps(
+            (string) ($a['ts'] ?? ''),
+            (string) ($b['ts'] ?? ''),
+        ));
+
+        return $messages;
+    }
+
+    /**
+     * The first timestamp in a file, read without walking past it.
+     */
+    public static function firstTimestamp(string $path): ?string
+    {
+        foreach (self::read($path) as $message) {
+            $ts = $message['ts'] ?? null;
+
+            return is_string($ts) ? $ts : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Concatenate files in the order given.
+     *
+     * @param  list<string>  $pagePaths
+     */
+    public static function concat(array $pagePaths, string $destination): int
     {
         $out = fopen($destination, 'wb');
 
@@ -73,7 +119,7 @@ final class Jsonl
         $written = 0;
 
         try {
-            foreach (array_reverse($pagePaths) as $path) {
+            foreach ($pagePaths as $path) {
                 if (! is_file($path)) {
                     continue;
                 }

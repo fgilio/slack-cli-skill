@@ -16,7 +16,7 @@ use RuntimeException;
  * its work reaches disk:
  *
  *   history  fetch conversations.history page by page, one file per page
- *   order    replay the pages backwards into a single oldest-first file
+ *   order    replay the pages by timestamp into one oldest-first file
  *   threads  fetch conversations.replies for every message that has any
  *   render   append the ordered stream to messages.jsonl and raw.md
  *
@@ -191,9 +191,12 @@ final class ChannelArchiver
         foreach ($pages as $page) {
             $messages = $page['messages'];
 
+            // Sorted rather than reversed: a page comes back newest message
+            // first, but that is a property of the API's answer, not
+            // something the archive should stake its ordering on.
             Jsonl::writeAtomic(
                 $this->pagePath($request, $checkpoint->pageCount),
-                array_reverse($messages),
+                Jsonl::sortByTimestamp($messages),
             );
 
             $checkpoint->pageCount++;
@@ -230,9 +233,20 @@ final class ChannelArchiver
     // Phase: order
     // =========================================================================
 
+    /**
+     * Replay the fetched pages into one oldest-first file.
+     *
+     * The pages are put in order by the timestamp each one opens with, never
+     * by the order they arrived in. conversations.history walks a channel
+     * backwards from the newest message, but given an `oldest` floor and no
+     * ceiling it pins to the floor and walks forwards instead, so a page's
+     * index says nothing about where it sits in time. Each page is already
+     * sorted and no two overlap, which makes ordering the files enough to
+     * order the channel without holding it in memory.
+     */
     private function orderPages(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, Closure $progress): void
     {
-        $paths = [];
+        $pages = [];
 
         for ($index = 0; $index < $checkpoint->pageCount; $index++) {
             $path = $this->pagePath($request, $index);
@@ -245,10 +259,20 @@ final class ChannelArchiver
                 "The archive run in {$request->outDir} is missing page {$index} of {$checkpoint->pageCount}. Delete {$request->checkpointPath()} and archive the channel again",
             );
 
-            $paths[] = $path;
+            $opensAt = Jsonl::firstTimestamp($path);
+
+            // A page whose window held nothing has no place in time and
+            // nothing to contribute.
+            if ($opensAt === null) {
+                continue;
+            }
+
+            $pages[] = ['opens_at' => $opensAt, 'path' => $path];
         }
 
-        $ordered = Jsonl::concatReverse($paths, $this->historyPath($request).'.part');
+        usort($pages, fn (array $a, array $b) => Jsonl::compareTimestamps($a['opens_at'], $b['opens_at']));
+
+        $ordered = Jsonl::concat(array_column($pages, 'path'), $this->historyPath($request).'.part');
         rename($this->historyPath($request).'.part', $this->historyPath($request));
 
         $progress("Ordered {$ordered} messages oldest first.");

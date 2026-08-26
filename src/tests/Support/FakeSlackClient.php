@@ -25,12 +25,14 @@ final class FakeSlackClient extends SlackClient
      * @param  array<string, list<array<string, mixed>>>  $threads  Replies keyed by parent ts, parent included.
      * @param  array<string, string>  $users
      * @param  int|null  $crashAfterPages  Die once this many pages have been served, standing in for a killed process.
+     * @param  bool  $forwardWhenFloored  Serve the oldest slice first once an `oldest` floor is given, the way Slack does.
      */
     public function __construct(
         private readonly array $pages,
         private readonly array $threads = [],
         private readonly array $users = [],
         private readonly ?int $crashAfterPages = null,
+        private readonly bool $forwardWhenFloored = true,
     ) {}
 
     public function historyPages(string $channelId, ?string $oldest = null, ?string $latest = null, ?string $cursor = null): Generator
@@ -38,10 +40,12 @@ final class FakeSlackClient extends SlackClient
         $this->historyCalls++;
         $this->cursorsRequested[] = $cursor;
 
+        $order = $this->servingOrder($oldest);
+
         $skip = $cursor === null ? 0 : (int) $cursor;
         $served = 0;
 
-        for ($index = $skip; $index < count($this->pages); $index++) {
+        for ($position = $skip; $position < count($order); $position++) {
             throw_if(
                 $this->crashAfterPages !== null && $served >= $this->crashAfterPages,
                 RuntimeException::class,
@@ -49,11 +53,11 @@ final class FakeSlackClient extends SlackClient
             );
 
             $messages = array_values(array_filter(
-                $this->pages[$index],
+                $this->pages[$order[$position]],
                 fn (array $message) => $this->withinWindow((string) $message['ts'], $oldest, $latest),
             ));
 
-            $next = $index + 1 < count($this->pages) ? (string) ($index + 1) : null;
+            $next = $position + 1 < count($order) ? (string) ($position + 1) : null;
 
             yield ['messages' => $messages, 'next_cursor' => $next];
 
@@ -63,6 +67,23 @@ final class FakeSlackClient extends SlackClient
                 return;
             }
         }
+    }
+
+    /**
+     * conversations.history walks a channel backwards from its newest
+     * message. Given an `oldest` floor and no ceiling it pins to the floor
+     * and walks forwards instead, handing back the oldest slice first while
+     * still ordering each page newest message first.
+     *
+     * @return list<int>
+     */
+    private function servingOrder(?string $oldest): array
+    {
+        $indexes = array_keys($this->pages);
+
+        return $oldest !== null && $this->forwardWhenFloored
+            ? array_reverse($indexes)
+            : $indexes;
     }
 
     public function repliesPages(string $channelId, string $threadTs, ?string $cursor = null): Generator

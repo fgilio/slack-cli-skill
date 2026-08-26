@@ -41,6 +41,7 @@ The binary also drops `doctrine/inflector`, so `Str::plural` and friends are not
 | Class | Role |
 | --- | --- |
 | `ChannelArchiver` | Streams one conversation to `messages.jsonl` and `raw.md`, checkpointing every page. |
+| `Jsonl` | Line-at-a-time reads, writes, joins, and timestamp ordering for the archive files. |
 | `ArchiveRequest` / `ArchiveSummary` | What a run was asked to do, and what it produced. |
 | `ArchiveCheckpoint` | The progress marker that makes `--resume` lossless. Deleted when a run finishes. |
 | `ArchiveMetadata` | The `.archive-meta.json` naming the channel a directory holds. Outlives the run. |
@@ -51,6 +52,12 @@ The binary also drops `doctrine/inflector`, so `Str::plural` and friends are not
 | `ArchiveScan` / `ScannedArchive` | Finds existing archives on disk for `archive:batch --init`. |
 
 `ArchiveCommand` and `ArchiveBatchCommand` are both thin: they parse options and print. Everything else lives in `app/Archive` so both paths behave the same.
+
+### Page order is never assumed
+
+`conversations.history` walks a channel backwards from its newest message, so page 0 normally holds the newest slice. Give it an `oldest` floor and no ceiling (what `--after` does) and it pins to the floor and walks **forwards** instead, handing back the oldest slice first while still ordering each page newest message first.
+
+The archiver therefore treats arrival order as meaningless. Each page is sorted by timestamp before it is written, and the ordering pass sorts the page files by the timestamp each one opens with. Pages never overlap, so ordering the files orders the channel without ever holding it in memory. `render` then refuses to write a stream whose timestamps step backwards, which turns any future ordering fault into a non-zero exit rather than a quietly scrambled archive.
 
 ## License
 
