@@ -11,10 +11,20 @@ $app = require_once __DIR__.'/bootstrap/app.php';
 
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 
+// --json promises parseable output, so nothing may colour it. Symfony
+// decorates help and error output on its own, ahead of any command, so
+// the decision belongs here rather than in a command.
+$output = new Symfony\Component\Console\Output\ConsoleOutput;
+
+if (in_array('--json', $argv, true)) {
+    $output->setDecorated(false);
+    $output->getErrorOutput()->setDecorated(false);
+}
+
 try {
     $status = $kernel->handle(
         $input = new Symfony\Component\Console\Input\ArgvInput,
-        new Symfony\Component\Console\Output\ConsoleOutput
+        $output
     );
 } catch (Throwable $e) {
     if (Fgilio\AgentSkillFoundation\Console\JsonExceptionRenderer::render($e)) {
