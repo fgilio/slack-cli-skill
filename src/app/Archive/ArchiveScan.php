@@ -22,7 +22,9 @@ final class ArchiveScan
         $found = [];
 
         foreach ($roots as $root) {
-            $dir = BatchManifest::expandPath($root);
+            // A manifest refuses relative paths, so a root given relative to
+            // the working directory is resolved before it names any archive.
+            $dir = self::absolutePath(BatchManifest::expandPath($root));
 
             throw_if(
                 ! is_dir($dir),
@@ -36,6 +38,35 @@ final class ArchiveScan
         ksort($found);
 
         return array_values($found);
+    }
+
+    /**
+     * Resolves . and .. by hand rather than with realpath(), so a root
+     * reached through a symlink keeps the path the user gave it.
+     */
+    private static function absolutePath(string $path): string
+    {
+        if (! str_starts_with($path, '/')) {
+            $path = getcwd().'/'.$path;
+        }
+
+        $segments = [];
+
+        foreach (explode('/', $path) as $segment) {
+            if ($segment === '' || $segment === '.') {
+                continue;
+            }
+
+            if ($segment === '..') {
+                array_pop($segments);
+
+                continue;
+            }
+
+            $segments[] = $segment;
+        }
+
+        return '/'.implode('/', $segments);
     }
 
     /**

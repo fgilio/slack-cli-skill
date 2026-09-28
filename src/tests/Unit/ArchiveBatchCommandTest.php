@@ -1,5 +1,7 @@
 <?php
 
+use App\Archive\BatchEntry;
+use App\Archive\BatchManifest;
 use App\Commands\ArchiveBatchCommand;
 use App\Services\SlackClient;
 use Symfony\Component\Console\Input\InputOption;
@@ -187,4 +189,29 @@ it('refuses to build a manifest from a tree with no archives', function () {
 
     expect($tester->execute(['paths' => [archiveDir()], '--init' => true]))->toBe(1)
         ->and($tester->getDisplay())->toContain('Found no archives in those directories');
+});
+
+it('builds a manifest from relative directories that archive:batch accepts back', function () {
+    // getcwd() reports the resolved path, and the temp dir sits behind a symlink on macOS.
+    $root = (string) realpath(archiveDir());
+    plantArchive($root.'/Equipo/Slack/eng', metadata: ['version' => 1, 'channel_id' => 'C47JM9E9K', 'channel' => '#eng-leadership']);
+    plantArchive($root.'/People/Gonza/Slack-DM', metadata: ['version' => 1, 'channel_id' => 'D0123ABCD', 'channel' => '@gparra']);
+
+    $cwd = (string) getcwd();
+    chdir($root);
+
+    try {
+        $tester = batchTester(fixtureClient());
+        $exit = $tester->execute(['paths' => ['Equipo/Slack', './People/../People/'], '--init' => true]);
+    } finally {
+        chdir($cwd);
+    }
+
+    $manifest = BatchManifest::fromJson($tester->getDisplay(), 'the --init output');
+
+    expect($exit)->toBe(0)
+        ->and(array_map(fn (BatchEntry $entry) => $entry->outDir, $manifest->entries))->toBe([
+            $root.'/Equipo/Slack/eng',
+            $root.'/People/Gonza/Slack-DM',
+        ]);
 });

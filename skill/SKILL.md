@@ -174,7 +174,7 @@ The exit code is 0 when every entry worked and 1 when any of them did not.
 slack-cli archive:batch --init ~/pla/team ~/notes > ~/pla/team/slack-archives.json
 ```
 
-`--init` walks the directories you give it, finds every archive (any directory holding a `messages.jsonl`), and prints a manifest to stdout. Targets come from the `.archive-meta.json` a run leaves behind, and fall back to the channel name in the title line of `raw.md`.
+`--init` walks the directories you give it, finds every archive (any directory holding a `messages.jsonl`), and prints a manifest to stdout. Targets come from the `.archive-meta.json` a run leaves behind, and fall back to the channel name in the title line of `raw.md`. Every `out` comes out as an absolute path, even when you pass the directories relative to where you run it, so the manifest works from any directory.
 
 A DM's title line holds a person's real name rather than the `@handle` Slack takes back, so those entries come out with `"target": "FIXME"` and a note on stderr saying which directory needs a hand. Fix them up and the manifest is ready.
 
