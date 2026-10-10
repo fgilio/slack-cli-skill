@@ -54,7 +54,7 @@ final class ChannelArchiver
 
         // The checkpoint goes away with the run, so the channel this
         // directory holds is recorded where a later refresh can find it.
-        (new ArchiveMetadata($summary->channelId, $summary->channelLabel))->save($request->outDir);
+        (new ArchiveMetadata($summary->channelId, $summary->channelLabel, $request->includeThreads))->save($request->outDir);
 
         $checkpoint->delete();
         $this->removeDirectory($request->workDir());

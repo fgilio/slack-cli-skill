@@ -17,6 +17,8 @@ final class ArchiveMetadata
     public function __construct(
         public readonly string $channelId,
         public readonly string $channelLabel,
+        /** Whether the last run nested thread replies. Null in files written before it was recorded. */
+        public readonly ?bool $threads = null,
     ) {}
 
     public static function pathIn(string $outDir): string
@@ -45,8 +47,13 @@ final class ArchiveMetadata
         }
 
         $label = $decoded['channel'] ?? null;
+        $threads = $decoded['threads'] ?? null;
 
-        return new self($channelId, is_string($label) && $label !== '' ? $label : $channelId);
+        return new self(
+            $channelId,
+            is_string($label) && $label !== '' ? $label : $channelId,
+            is_bool($threads) ? $threads : null,
+        );
     }
 
     public function save(string $outDir): void
@@ -58,6 +65,7 @@ final class ArchiveMetadata
             'version' => self::VERSION,
             'channel_id' => $this->channelId,
             'channel' => $this->channelLabel,
+            'threads' => $this->threads,
             'updated_at' => gmdate('c'),
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 
