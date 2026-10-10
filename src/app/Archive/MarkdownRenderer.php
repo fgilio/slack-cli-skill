@@ -97,38 +97,130 @@ final class MarkdownRenderer
             return ['[mensaje eliminado]'];
         }
 
-        $text = $this->markup->decode((string) Arr::get($message, 'text', ''));
+        return [
+            ...$this->textLines((string) Arr::get($message, 'text', '')),
+            ...$this->fileLines($message),
+            ...$this->sharedMessageLines($message),
+        ];
+    }
 
+    /**
+     * @return list<string>
+     */
+    private function textLines(string $text): array
+    {
         /** @var list<string> $lines */
-        $lines = array_map(rtrim(...), preg_split('/\r\n|\r|\n/', $text) ?: []);
+        $lines = array_map(rtrim(...), preg_split('/\r\n|\r|\n/', $this->markup->decode($text)) ?: []);
 
         while ($lines !== [] && end($lines) === '') {
             array_pop($lines);
         }
 
-        return [...$lines, ...$this->attachmentLines($message)];
+        return $lines;
     }
 
     /**
      * @param  array<string, mixed>  $message
      * @return list<string>
      */
-    private function attachmentLines(array $message): array
+    private function fileLines(array $message): array
     {
-        $lines = [];
-
         /** @var array<int, array<string, mixed>> $files */
         $files = Arr::get($message, 'files', []);
 
-        foreach ($files as $file) {
-            $name = (string) Arr::get($file, 'name', Arr::get($file, 'title', 'archivo'));
-            $type = (string) Arr::get($file, 'mimetype', Arr::get($file, 'filetype', 'desconocido'));
-            $size = $this->humanSize((int) Arr::get($file, 'size', 0));
+        return collect($files)
+            ->map(function (array $file): string {
+                $name = (string) Arr::get($file, 'name', Arr::get($file, 'title', 'archivo'));
+                $type = (string) Arr::get($file, 'mimetype', Arr::get($file, 'filetype', 'desconocido'));
+                $size = $this->humanSize((int) Arr::get($file, 'size', 0));
 
-            $lines[] = "[archivo adjunto: {$name} ({$type} - {$size})]";
+                return "[archivo adjunto: {$name} ({$type} - {$size})]";
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * A shared or forwarded message arrives as an attachment, and often is
+     * the whole message: sharing without a comment leaves `text` empty.
+     *
+     * @param  array<string, mixed>  $message
+     * @return list<string>
+     */
+    private function sharedMessageLines(array $message): array
+    {
+        /** @var array<int, array<string, mixed>> $attachments */
+        $attachments = Arr::get($message, 'attachments', []);
+
+        return collect($attachments)
+            ->filter(fn (array $attachment): bool => $this->isSharedMessage($attachment))
+            ->flatMap(fn (array $shared): array => [
+                $this->sharedMessageLabel($shared),
+                ...array_map(fn (string $line): string => rtrim('> '.$line), $this->sharedMessageBody($shared)),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Website previews carry neither flag, so they stay out of the archive.
+     *
+     * @param  array<string, mixed>  $attachment
+     */
+    private function isSharedMessage(array $attachment): bool
+    {
+        return (bool) Arr::get($attachment, 'is_share', false)
+            || (bool) Arr::get($attachment, 'is_msg_unfurl', false);
+    }
+
+    /**
+     * @param  array<string, mixed>  $shared
+     */
+    private function sharedMessageLabel(array $shared): string
+    {
+        $ts = Arr::get($shared, 'ts');
+
+        $when = is_string($ts) && $ts !== ''
+            ? ', '.$this->moment($ts)->format('Y-m-d H:i')
+            : '';
+
+        return "[mensaje compartido de {$this->sharedMessageAuthor($shared)}{$when}]";
+    }
+
+    /**
+     * @param  array<string, mixed>  $shared
+     */
+    private function sharedMessageAuthor(array $shared): string
+    {
+        foreach (['author_name', 'author_subname'] as $field) {
+            $name = Arr::get($shared, $field);
+
+            if (is_string($name) && $name !== '') {
+                return $name;
+            }
         }
 
-        return $lines;
+        $authorId = Arr::get($shared, 'author_id');
+
+        return is_string($authorId) && $authorId !== '' ? $this->names->userName($authorId) : 'desconocido';
+    }
+
+    /**
+     * A share of a bot message (an alert, a payment notice) carries its
+     * headline in `title` rather than in `text`.
+     *
+     * @param  array<string, mixed>  $shared
+     * @return list<string>
+     */
+    private function sharedMessageBody(array $shared): array
+    {
+        $title = Arr::get($shared, 'title');
+
+        return [
+            ...(is_string($title) && $title !== '' ? $this->textLines($title) : []),
+            ...$this->textLines((string) Arr::get($shared, 'text', '')),
+            ...$this->fileLines($shared),
+        ];
     }
 
     private function humanSize(int $bytes): string
