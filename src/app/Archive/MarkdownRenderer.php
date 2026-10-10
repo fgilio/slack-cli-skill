@@ -28,9 +28,8 @@ final class MarkdownRenderer
 
     public function header(string $channelLabel, string $from, string $to, string $workspace, string $channelMeta): string
     {
-        return "# {$channelLabel} — Dump completo ({$from} a {$to})\n\n"
-            ."Workspace: {$workspace}. {$channelMeta}\n"
-            ."Horarios en {$this->timezone->getName()} .\n";
+        return (new ArchiveHeader($channelLabel, $from, $to, $workspace, $channelMeta, $this->timezone->getName()))
+            ->toMarkdown();
     }
 
     /**

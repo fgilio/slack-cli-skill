@@ -555,15 +555,18 @@ final class ChannelArchiver
             return;
         }
 
-        $header = fgets($handle);
+        $line = fgets($handle);
+        $title = $line === false ? null : ArchiveHeader::parseTitle($line);
 
-        if ($header === false || ! preg_match('/^(# .+ — Dump completo \(\d{4}-\d{2}-\d{2} a )(\d{4}-\d{2}-\d{2})(\)\R?)$/u', $header, $parts)) {
+        if ($title === null) {
             fclose($handle);
 
             return;
         }
 
-        if ($parts[2] === $lastDay) {
+        [$channelLabel, $from, $to] = $title;
+
+        if ($to === $lastDay) {
             fclose($handle);
 
             return;
@@ -578,7 +581,7 @@ final class ChannelArchiver
             return;
         }
 
-        fwrite($out, $parts[1].$lastDay.$parts[3]);
+        fwrite($out, ArchiveHeader::title($channelLabel, $from, $lastDay)."\n");
 
         while (($line = fgets($handle)) !== false) {
             fwrite($out, $line);
