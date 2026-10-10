@@ -238,5 +238,5 @@ it('records in the metadata whether the run nested thread replies', function (bo
 
     (new ChannelArchiver(fixtureClient()))->archive(archiveRequest($dir, ['includeThreads' => $threads]));
 
-    expect(ArchiveMetadata::load($dir)?->threads)->toBe($threads);
+    expect(ArchiveMetadata::load($dir)?->threadSegments)->toBe([['after' => null, 'nested' => $threads]]);
 })->with([true, false]);

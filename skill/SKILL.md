@@ -131,7 +131,7 @@ Every page that reaches disk updates `.archive-checkpoint.json` in the output di
 
 `--since-last` is the refresh path: it reads the newest message already in `messages.jsonl` and fetches only what came after, appending to both files and moving the header's closing date forward. History is never rewritten, which means replies posted to an old thread after that thread was archived do not come back. Re-archive into a clean directory when you need them.
 
-Every finished run also drops an `.archive-meta.json` naming the channel the directory holds and whether the run nested thread replies, which is what lets `archive:batch --init` rebuild a manifest later.
+Every finished run also drops an `.archive-meta.json` naming the channel the directory holds and whether each run nested thread replies, which is what lets `archive:batch --init` rebuild a manifest later.
 
 ### Re-rendering
 
@@ -145,7 +145,7 @@ It writes what `archive` would write for the same messages: the same header, day
 
 - The channel label, date range, workspace line and timezone come from the four header lines of the current `raw.md`. Those are what the run wrote, and the API's answer may have changed since (a renamed channel, a new member count, a different timezone on your profile). A `raw.md` without that header is refused.
 - People's names go through the same lookup `archive` uses, served from the cached user directory, so the command still needs `slack-cli config`.
-- Replies nest under their parent unless `.archive-meta.json` says the last run used `--no-threads`.
+- Replies nest under their parent unless `.archive-meta.json` says the run that archived that parent used `--no-threads`. Each `--since-last` run that switches the setting is recorded from the message it extended from, so a mixed archive renders each part the way it was written.
 - A directory holding `.archive-checkpoint.json` is refused: finish that run with `archive --resume` first.
 - The new copy is written to `raw.md.part` and moved into place only when complete.
 

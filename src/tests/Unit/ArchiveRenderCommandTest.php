@@ -113,7 +113,31 @@ it('keeps a reply sent to the channel on its own line when the run skipped threa
         ->and($archived)->toContain("\n**09:20 Ana Pérez:** dale\n");
 });
 
-it('nests replies when the metadata predates the threads flag', function () {
+it('renders each segment of an archive with the thread setting of the run that wrote it', function (bool $first, bool $later) {
+    $dir = archiveDir();
+    archivedWith(sharedClient(), $dir, threads: $first);
+
+    $laterPages = [[
+        ['ts' => '1785668760.000700', 'user' => 'U01', 'text' => 'ok', 'thread_ts' => TS_LATER, 'subtype' => 'thread_broadcast'],
+        ['ts' => TS_LATER, 'user' => 'U02', 'text' => 'una más', 'thread_ts' => TS_LATER, 'reply_count' => 1],
+    ]];
+    $extended = archivedWith(new FakeSlackClient(
+        pages: [...$laterPages],
+        threads: [TS_LATER => [
+            ['ts' => TS_LATER, 'user' => 'U02', 'text' => 'una más', 'thread_ts' => TS_LATER],
+            ['ts' => '1785668760.000700', 'user' => 'U01', 'text' => 'ok', 'thread_ts' => TS_LATER, 'subtype' => 'thread_broadcast'],
+        ]],
+        users: ['U01' => 'Franco Gilio', 'U02' => 'Ana Pérez'],
+    ), $dir, threads: $later, sinceLast: true);
+
+    expect(renderTester()->execute(['dir' => $dir]))->toBe(0)
+        ->and(file_get_contents($dir.'/raw.md'))->toBe($extended);
+})->with([
+    'threads, then --no-threads' => [true, false],
+    '--no-threads, then threads' => [false, true],
+]);
+
+it('nests replies when the metadata predates the thread settings', function () {
     $dir = archiveDir();
     $archived = archivedWith(sharedClient(), $dir);
 

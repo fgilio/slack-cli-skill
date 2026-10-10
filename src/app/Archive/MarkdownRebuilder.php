@@ -56,7 +56,11 @@ final class MarkdownRebuilder
             throw $e;
         }
 
-        rename($temp, $markdownPath);
+        throw_unless(
+            rename($temp, $markdownPath),
+            RuntimeException::class,
+            "Unable to move the rebuilt {$temp} into place at {$markdownPath}",
+        );
 
         return new ArchiveSummary(
             channelId: $metadata->channelId ?? $header->channelLabel,
@@ -88,7 +92,7 @@ final class MarkdownRebuilder
         try {
             fwrite($out, $header->toMarkdown());
 
-            foreach ($this->threads($messagesPath, $metadata->threads ?? true) as [$message, $replies]) {
+            foreach ($this->threads($messagesPath, $metadata ?? new ArchiveMetadata('', '')) as [$message, $replies]) {
                 fwrite($out, $renderer->message($message, $replies));
 
                 $day = $renderer->day((string) Arr::get($message, 'ts', '0'));
@@ -109,18 +113,20 @@ final class MarkdownRebuilder
     /**
      * messages.jsonl holds each thread's replies right after their parent.
      * They are gathered back under it one thread at a time, unless the run
-     * skipped threads: a reply also sent to the channel then stands on its
-     * own, even when it lands right after its parent.
+     * that archived the parent skipped threads: a reply also sent to the
+     * channel then stands on its own, even right after its parent.
      *
      * @return Generator<int, array{0: array<string, mixed>, 1: list<array<string, mixed>>}>
      */
-    private function threads(string $messagesPath, bool $nestsReplies): Generator
+    private function threads(string $messagesPath, ArchiveMetadata $metadata): Generator
     {
         $parent = null;
         $replies = [];
 
         foreach (Jsonl::read($messagesPath) as $message) {
-            if ($nestsReplies && $parent !== null && $this->isReplyTo($message, $parent)) {
+            if ($parent !== null
+                && $this->isReplyTo($message, $parent)
+                && $metadata->nestsRepliesAt((string) Arr::get($parent, 'ts', '0'))) {
                 $replies[] = $message;
 
                 continue;
