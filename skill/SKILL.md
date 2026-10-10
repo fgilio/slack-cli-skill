@@ -148,6 +148,7 @@ It writes what `archive` would write for the same messages: the same header, day
 - Replies nest under their parent unless `.archive-meta.json` says the run that archived that parent used `--no-threads`. Each `--since-last` run that switches the setting is recorded from the message it extended from, so a mixed archive renders each part the way it was written.
 - A directory holding `.archive-checkpoint.json` is refused: finish that run with `archive --resume` first.
 - The new copy is written to `raw.md.part` and moved into place only when complete.
+- `raw.md` is rebuilt from scratch, so hand edits below the header (a redacted PIN, a removed line) are replaced by what `messages.jsonl` holds. Redact both files, or redo the edits after rendering.
 
 ## Batches
 
