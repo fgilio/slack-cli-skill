@@ -2,12 +2,15 @@
 
 use App\Archive\ArchiveRequest;
 use App\Archive\ChannelArchiver;
+use App\Archive\MarkdownRebuilder;
+use App\Archive\SlackNameResolver;
 use App\Commands\ArchiveRenderCommand;
 use App\Services\SlackClient;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Tester\CommandTester;
 use Tests\Support\ConsoleContainer;
 use Tests\Support\FakeSlackClient;
+use Tests\Support\ShortWriteStream;
 
 function renderTester(?SlackClient $client = null): CommandTester
 {
@@ -185,6 +188,54 @@ it('reports what it rendered', function () {
         'first_day' => '2026-08-01',
         'last_day' => '2026-08-02',
     ]);
+});
+
+it('checks raw.md against a fresh render and writes nothing', function () {
+    $dir = archiveDir();
+    $archived = archivedWith(sharedClient(), $dir);
+    $tester = renderTester();
+
+    expect($tester->execute(['dir' => $dir, '--check' => true]))->toBe(0)
+        ->and($tester->getDisplay())->toContain('matches its messages.jsonl');
+
+    $edited = str_replace('seguimos mañana', 'seguimos el lunes', $archived);
+    $line = array_key_first(preg_grep('/seguimos el lunes/', explode("\n", $edited))) + 1;
+    file_put_contents($dir.'/raw.md', $edited);
+
+    expect($tester->execute(['dir' => $dir, '--check' => true]))->toBe(1)
+        ->and($tester->getDisplay())->toContain("first at line {$line}")
+        ->and(file_get_contents($dir.'/raw.md'))->toBe($edited)
+        ->and(glob($dir.'/raw.md.*'))->toBe([]);
+});
+
+it('reports a check as JSON', function () {
+    $dir = archiveDir();
+    $archived = archivedWith(sharedClient(), $dir);
+    $tester = renderTester();
+
+    $tester->execute(['dir' => $dir, '--check' => true, '--json' => true]);
+    expect(json_decode($tester->getDisplay(), true)['data'])->toBe(['matches' => true]);
+
+    file_put_contents($dir.'/raw.md', $archived."stale\n");
+    expect($tester->execute(['dir' => $dir, '--check' => true, '--json' => true]))->toBe(1);
+});
+
+it('leaves raw.md alone when the render cannot be written in full', function () {
+    $dir = archiveDir();
+    $archived = archivedWith(sharedClient(), $dir);
+    $rebuilder = new MarkdownRebuilder(new SlackNameResolver(sharedClient()));
+
+    stream_wrapper_register(ShortWriteStream::SCHEME, ShortWriteStream::class);
+
+    try {
+        expect(fn () => $rebuilder->rebuild(ShortWriteStream::SCHEME.'://'.$dir))
+            ->toThrow(RuntimeException::class, 'Unable to write the render');
+    } finally {
+        stream_wrapper_unregister(ShortWriteStream::SCHEME);
+    }
+
+    expect(file_get_contents($dir.'/raw.md'))->toBe($archived)
+        ->and(glob($dir.'/raw.md.*'))->toBe([]);
 });
 
 it('refuses a directory holding an interrupted archive run', function () {
