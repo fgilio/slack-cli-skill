@@ -22,30 +22,7 @@ final class MarkdownRebuilder
 
     public function rebuild(string $outDir): ArchiveSummary
     {
-        $messagesPath = ArchiveRequest::messagesPathIn($outDir);
-        $markdownPath = ArchiveRequest::markdownPathIn($outDir);
-
-        throw_if(
-            is_file(ArchiveRequest::checkpointPathIn($outDir)),
-            RuntimeException::class,
-            "The directory {$outDir} holds an interrupted archive run. Finish it with `slack-cli archive --resume` before rendering it",
-        );
-
-        throw_unless(
-            is_file($messagesPath),
-            RuntimeException::class,
-            "Unable to find messages.jsonl in {$outDir}. archive:render rebuilds raw.md from it",
-        );
-
-        $header = ArchiveHeader::read($markdownPath);
-
-        throw_if(
-            $header === null,
-            RuntimeException::class,
-            "Unable to read the archive header at the top of {$markdownPath}. archive:render takes the channel, workspace and timezone from it",
-        );
-
-        $metadata = ArchiveMetadata::load($outDir);
+        [$header, $metadata, $messagesPath, $markdownPath] = $this->sources($outDir);
         $temp = $markdownPath.'.part';
 
         try {
@@ -74,6 +51,84 @@ final class MarkdownRebuilder
             messagesPath: $messagesPath,
             markdownPath: $markdownPath,
         );
+    }
+
+    /**
+     * The first raw.md line a render would change, or null when raw.md
+     * matches messages.jsonl, as it must after both files are redacted.
+     * The render goes to a temporary file, so the archive is untouched.
+     */
+    public function firstStaleLine(string $outDir): ?int
+    {
+        [$header, $metadata, $messagesPath, $markdownPath] = $this->sources($outDir);
+        $temp = tempnam(sys_get_temp_dir(), 'slack-render-');
+
+        throw_if($temp === false, RuntimeException::class, 'Unable to create a temporary file for the render');
+
+        try {
+            $this->write($header, $metadata, $messagesPath, $temp);
+
+            return $this->firstDifferentLine($markdownPath, $temp);
+        } finally {
+            @unlink($temp);
+        }
+    }
+
+    /**
+     * @return array{0: ArchiveHeader, 1: ?ArchiveMetadata, 2: string, 3: string}
+     */
+    private function sources(string $outDir): array
+    {
+        $messagesPath = ArchiveRequest::messagesPathIn($outDir);
+        $markdownPath = ArchiveRequest::markdownPathIn($outDir);
+
+        throw_if(
+            is_file(ArchiveRequest::checkpointPathIn($outDir)),
+            RuntimeException::class,
+            "The directory {$outDir} holds an interrupted archive run. Finish it with `slack-cli archive --resume` before rendering it",
+        );
+
+        throw_unless(
+            is_file($messagesPath),
+            RuntimeException::class,
+            "Unable to find messages.jsonl in {$outDir}. archive:render rebuilds raw.md from it",
+        );
+
+        $header = ArchiveHeader::read($markdownPath);
+
+        throw_if(
+            $header === null,
+            RuntimeException::class,
+            "Unable to read the archive header at the top of {$markdownPath}. archive:render takes the channel, workspace and timezone from it",
+        );
+
+        return [$header, ArchiveMetadata::load($outDir), $messagesPath, $markdownPath];
+    }
+
+    private function firstDifferentLine(string $current, string $rendered): ?int
+    {
+        $left = fopen($current, 'rb');
+        $right = fopen($rendered, 'rb');
+
+        throw_if($left === false || $right === false, RuntimeException::class, "Unable to read {$current} to compare it with the render");
+
+        try {
+            for ($line = 1; ; $line++) {
+                $currentLine = fgets($left);
+                $renderedLine = fgets($right);
+
+                if ($currentLine === false && $renderedLine === false) {
+                    return null;
+                }
+
+                if ($currentLine !== $renderedLine) {
+                    return $line;
+                }
+            }
+        } finally {
+            fclose($left);
+            fclose($right);
+        }
     }
 
     /**

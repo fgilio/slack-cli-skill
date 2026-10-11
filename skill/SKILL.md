@@ -67,6 +67,7 @@ slack-cli archive '#eng-leadership' --since-last --out=./eng-leadership
 
 # Rebuild raw.md from messages.jsonl, fetching no messages (see Re-rendering below)
 slack-cli archive:render ./eng-leadership
+slack-cli archive:render ./eng-leadership --check   # compare only, write nothing
 
 # Refresh every archive listed in a manifest (see Batches below)
 slack-cli archive:batch ~/pla/team/slack-archives.json --since-last
@@ -149,6 +150,12 @@ It writes what `archive` would write for the same messages: the same header, day
 - A directory holding `.archive-checkpoint.json` is refused: finish that run with `archive --resume` first.
 - The new copy is written to `raw.md.part` and moved into place only when complete.
 - `raw.md` is rebuilt from scratch, so hand edits below the header (a redacted PIN, a removed line) are replaced by what `messages.jsonl` holds. Redact both files, or redo the edits after rendering.
+
+`--check` renders to a temporary file and compares it with `raw.md`, writing nothing. It exits 0 when they match and 1 with the first line that differs, so after redacting both files it proves a later render keeps the redactions.
+
+```bash
+slack-cli archive:render <dir> --check
+```
 
 ## Batches
 

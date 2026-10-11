@@ -14,7 +14,8 @@ use App\Archive\SlackNameResolver;
 class ArchiveRenderCommand extends BaseSlackCommand
 {
     protected $signature = 'archive:render
-        {dir : An archive directory, holding messages.jsonl and raw.md}';
+        {dir : An archive directory, holding messages.jsonl and raw.md}
+        {--check : Compare raw.md with a fresh render and write nothing, exiting 1 when they differ}';
 
     protected $description = 'Rebuild raw.md from an archive directory\'s messages.jsonl';
 
@@ -26,7 +27,13 @@ class ArchiveRenderCommand extends BaseSlackCommand
             return $this->failWith("Unable to find the archive directory {$outDir}");
         }
 
-        $summary = (new MarkdownRebuilder(new SlackNameResolver($this->client)))->rebuild($outDir);
+        $rebuilder = new MarkdownRebuilder(new SlackNameResolver($this->client));
+
+        if ($this->option('check')) {
+            return $this->check($rebuilder, $outDir);
+        }
+
+        $summary = $rebuilder->rebuild($outDir);
 
         if ($this->wantsJson()) {
             return $this->outputJson($summary->toArray());
@@ -40,6 +47,26 @@ class ArchiveRenderCommand extends BaseSlackCommand
         }
 
         $this->line($summary->markdownPath);
+
+        return self::SUCCESS;
+    }
+
+    private function check(MarkdownRebuilder $rebuilder, string $outDir): int
+    {
+        $line = $rebuilder->firstStaleLine($outDir);
+
+        if ($line !== null) {
+            return $this->failWith(
+                "raw.md in {$outDir} differs from a render of its messages.jsonl, first at line {$line}. archive:render without --check rewrites it and drops any edit made only to raw.md",
+                ['line' => $line],
+            );
+        }
+
+        if ($this->wantsJson()) {
+            return $this->outputJson(['matches' => true]);
+        }
+
+        $this->line("raw.md in {$outDir} matches its messages.jsonl");
 
         return self::SUCCESS;
     }

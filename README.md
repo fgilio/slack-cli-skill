@@ -45,6 +45,7 @@ slack-cli archive '#eng-leadership' --since-last --out=./eng-leadership
 
 # Rebuild raw.md from the messages.jsonl already on disk, without fetching anything
 slack-cli archive:render ./eng-leadership
+slack-cli archive:render ./eng-leadership --check   # compare only, write nothing
 
 # Refresh every archive a manifest lists, then build a manifest from a tree
 slack-cli archive:batch ~/pla/team/slack-archives.json --since-last

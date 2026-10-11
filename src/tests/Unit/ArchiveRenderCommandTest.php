@@ -187,6 +187,36 @@ it('reports what it rendered', function () {
     ]);
 });
 
+it('checks raw.md against a fresh render and writes nothing', function () {
+    $dir = archiveDir();
+    $archived = archivedWith(sharedClient(), $dir);
+    $tester = renderTester();
+
+    expect($tester->execute(['dir' => $dir, '--check' => true]))->toBe(0)
+        ->and($tester->getDisplay())->toContain('matches its messages.jsonl');
+
+    $edited = str_replace('seguimos mañana', 'seguimos el lunes', $archived);
+    $line = array_key_first(preg_grep('/seguimos el lunes/', explode("\n", $edited))) + 1;
+    file_put_contents($dir.'/raw.md', $edited);
+
+    expect($tester->execute(['dir' => $dir, '--check' => true]))->toBe(1)
+        ->and($tester->getDisplay())->toContain("first at line {$line}")
+        ->and(file_get_contents($dir.'/raw.md'))->toBe($edited)
+        ->and(glob($dir.'/raw.md.*'))->toBe([]);
+});
+
+it('reports a check as JSON', function () {
+    $dir = archiveDir();
+    $archived = archivedWith(sharedClient(), $dir);
+    $tester = renderTester();
+
+    $tester->execute(['dir' => $dir, '--check' => true, '--json' => true]);
+    expect(json_decode($tester->getDisplay(), true)['data'])->toBe(['matches' => true]);
+
+    file_put_contents($dir.'/raw.md', $archived."stale\n");
+    expect($tester->execute(['dir' => $dir, '--check' => true, '--json' => true]))->toBe(1);
+});
+
 it('refuses a directory holding an interrupted archive run', function () {
     $dir = archiveDir();
     $archived = archivedWith(sharedClient(), $dir);
