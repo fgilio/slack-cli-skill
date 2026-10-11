@@ -24,6 +24,7 @@ Read-only Slack CLI. Access DMs, private channels, and everything you can see in
 | `slack-cli messages:history <channel>` | Read messages                 |
 | `slack-cli archive <target>`           | Dump a whole conversation     |
 | `slack-cli archive:batch <manifest>`   | Refresh many archives at once |
+| `slack-cli archive:render <dir>`       | Rebuild raw.md from disk      |
 | `slack-cli thread:read <url>`          | Read thread from URL          |
 | `slack-cli search <query>`             | Search messages               |
 | `slack-cli users:lookup <query>`       | Find users                    |
@@ -35,6 +36,7 @@ Read-only Slack CLI. Access DMs, private channels, and everything you can see in
 - "Read the last 20 messages in #engineering"
 - "Archive the last year of #eng-leadership to ./archive"
 - "Refresh every Slack archive in my team repo"
+- "Re-render the raw.md of my Slack archives"
 - "Summarize this Slack thread: [paste URL]"
 - "Search Slack for messages about deployment from john"
 - "Who is in the #frontend channel?"
@@ -62,6 +64,9 @@ slack-cli thread:read "https://workspace.slack.com/archives/..."
 slack-cli archive '#eng-leadership' --after=2026-01-01 --before=2026-08-26 --out=./eng-leadership
 slack-cli archive @nacho --out=./dm-nacho
 slack-cli archive '#eng-leadership' --since-last --out=./eng-leadership
+
+# Rebuild raw.md from messages.jsonl, fetching no messages (see Re-rendering below)
+slack-cli archive:render ./eng-leadership
 
 # Refresh every archive listed in a manifest (see Batches below)
 slack-cli archive:batch ~/pla/team/slack-archives.json --since-last
@@ -112,7 +117,13 @@ Horarios en Europe/London .
 
 **10:18 Franco Gilio:** Solucionado el problema al deployar
   > **10:43 Ignacio Milano:** bieeen, estaba siendo molesto ya
+
+**11:02 Ana Pérez:** [mensaje compartido de Bruno Díaz, 2026-08-03 09:40]
+  > El deploy de hoy quedó para la tarde.
+  > Aviso cuando esté.
 ```
+
+A message someone shared or forwarded renders under the message that shared it: a `[mensaje compartido de <autor>, <YYYY-MM-DD HH:MM>]` line, then the shared text, title and files quoted with `> `. Sharing without a comment leaves the message text empty, so the label sits on the message line itself. Previews of ordinary web links are left out. Grep `mensaje compartido` to find every share.
 
 ### Resuming and refreshing
 
@@ -120,7 +131,24 @@ Every page that reaches disk updates `.archive-checkpoint.json` in the output di
 
 `--since-last` is the refresh path: it reads the newest message already in `messages.jsonl` and fetches only what came after, appending to both files and moving the header's closing date forward. History is never rewritten, which means replies posted to an old thread after that thread was archived do not come back. Re-archive into a clean directory when you need them.
 
-Every finished run also drops an `.archive-meta.json` naming the channel the directory holds, which is what lets `archive:batch --init` rebuild a manifest later.
+Every finished run also drops an `.archive-meta.json` naming the channel the directory holds and whether each run nested thread replies, which is what lets `archive:batch --init` rebuild a manifest later.
+
+### Re-rendering
+
+`archive:render` rebuilds `raw.md` from the `messages.jsonl` beside it, so an archive picks up changes to how `raw.md` is written without archiving the conversation again.
+
+```bash
+slack-cli archive:render <dir>
+```
+
+It writes what `archive` would write for the same messages: the same header, day grouping and thread nesting, and an archive extended with `--since-last` comes out as one continuous copy. It fetches no messages and never touches `messages.jsonl`.
+
+- The channel label, date range, workspace line and timezone come from the four header lines of the current `raw.md`. Those are what the run wrote, and the API's answer may have changed since (a renamed channel, a new member count, a different timezone on your profile). A `raw.md` without that header is refused.
+- People's names go through the same lookup `archive` uses, served from the cached user directory, so the command still needs `slack-cli config`.
+- Replies nest under their parent unless `.archive-meta.json` says the run that archived that parent used `--no-threads`. Each `--since-last` run that switches the setting is recorded from the message it extended from, so a mixed archive renders each part the way it was written.
+- A directory holding `.archive-checkpoint.json` is refused: finish that run with `archive --resume` first.
+- The new copy is written to `raw.md.part` and moved into place only when complete.
+- `raw.md` is rebuilt from scratch, so hand edits below the header (a redacted PIN, a removed line) are replaced by what `messages.jsonl` holds. Redact both files, or redo the edits after rendering.
 
 ## Batches
 

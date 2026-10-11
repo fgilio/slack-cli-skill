@@ -45,13 +45,15 @@ The binary also drops `doctrine/inflector`, so `Str::plural` and friends are not
 | `ArchiveRequest` / `ArchiveSummary` | What a run was asked to do, and what it produced. |
 | `ArchiveCheckpoint` | The progress marker that makes `--resume` lossless. Deleted when a run finishes. |
 | `ArchiveMetadata` | The `.archive-meta.json` naming the channel a directory holds. Outlives the run. |
+| `ArchiveHeader` | The four lines that open `raw.md`, written and read back in one place. |
+| `MarkdownRebuilder` | Rebuilds `raw.md` from `messages.jsonl` for `archive:render`, through the same `MarkdownRenderer`. |
 | `DayBoundary` | Turns a `YYYY-MM-DD` day into the Slack timestamp that bounds it. |
 | `BatchManifest` / `BatchEntry` | The batch manifest, validated up front. |
 | `BatchRunner` / `BatchResult` | Walks the entries, records what each one did, never aborts on one failure. |
 | `SlackEntryArchiver` | Turns an entry into an `ArchiveRequest` and hands it to a `ChannelArchiver`. |
 | `ArchiveScan` / `ScannedArchive` | Finds existing archives on disk for `archive:batch --init`. |
 
-`ArchiveCommand` and `ArchiveBatchCommand` are both thin: they parse options and print. Everything else lives in `app/Archive` so both paths behave the same.
+`ArchiveCommand`, `ArchiveBatchCommand` and `ArchiveRenderCommand` are all thin: they parse options and print. Everything else lives in `app/Archive` so every path behaves the same.
 
 ### Page order is never assumed
 

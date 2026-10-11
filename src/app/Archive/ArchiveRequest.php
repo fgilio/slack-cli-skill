@@ -19,12 +19,22 @@ final class ArchiveRequest
 
     public function messagesPath(): string
     {
-        return $this->outDir.'/messages.jsonl';
+        return self::messagesPathIn($this->outDir);
+    }
+
+    public static function messagesPathIn(string $outDir): string
+    {
+        return $outDir.'/messages.jsonl';
     }
 
     public function markdownPath(): string
     {
-        return $this->outDir.'/raw.md';
+        return self::markdownPathIn($this->outDir);
+    }
+
+    public static function markdownPathIn(string $outDir): string
+    {
+        return $outDir.'/raw.md';
     }
 
     public function checkpointPath(): string

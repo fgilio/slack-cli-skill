@@ -1,6 +1,7 @@
 <?php
 
 use App\Archive\ArchiveCheckpoint;
+use App\Archive\ArchiveMetadata;
 use App\Archive\ArchiveRequest;
 use App\Archive\ChannelArchiver;
 use App\Archive\Jsonl;
@@ -231,3 +232,11 @@ it('honours an inclusive date window', function () {
         ->and($summary->firstDay)->toBe('2026-08-01')
         ->and($summary->lastDay)->toBe('2026-08-01');
 });
+
+it('records in the metadata whether the run nested thread replies', function (bool $threads) {
+    $dir = archiveDir();
+
+    (new ChannelArchiver(fixtureClient()))->archive(archiveRequest($dir, ['includeThreads' => $threads]));
+
+    expect(ArchiveMetadata::load($dir)?->threadSegments)->toBe([['after' => null, 'nested' => $threads]]);
+})->with([true, false]);
