@@ -17,7 +17,7 @@ class ArchiveRenderCommand extends BaseSlackCommand
         {dir : An archive directory, holding messages.jsonl and raw.md}
         {--check : Compare raw.md with a fresh render and write nothing, exiting 1 when they differ}';
 
-    protected $description = 'Rebuild raw.md from an archive directory\'s messages.jsonl';
+    protected $description = 'Render raw.md again from an archive directory\'s messages.jsonl';
 
     protected function doExecute(): int
     {
