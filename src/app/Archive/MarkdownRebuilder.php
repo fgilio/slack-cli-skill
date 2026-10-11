@@ -145,10 +145,10 @@ final class MarkdownRebuilder
         $summary = ['messages' => 0, 'threads' => 0, 'replies' => 0, 'first_day' => null, 'last_day' => null];
 
         try {
-            fwrite($out, $header->toMarkdown());
+            $this->append($out, $header->toMarkdown(), $temp);
 
             foreach ($this->threads($messagesPath, $metadata ?? new ArchiveMetadata('', '')) as [$message, $replies]) {
-                fwrite($out, $renderer->message($message, $replies));
+                $this->append($out, $renderer->message($message, $replies), $temp);
 
                 $day = $renderer->day((string) Arr::get($message, 'ts', '0'));
 
@@ -158,11 +158,28 @@ final class MarkdownRebuilder
                 $summary['first_day'] ??= $day;
                 $summary['last_day'] = $day;
             }
+
+            throw_unless(fflush($out), RuntimeException::class, "Unable to finish writing the render at {$temp}. Check the free disk space");
         } finally {
             fclose($out);
         }
 
         return $summary;
+    }
+
+    /**
+     * A full disk makes fwrite() write less than it was given. A cut render
+     * must never be compared with raw.md or moved into its place.
+     *
+     * @param  resource  $out
+     */
+    private function append($out, string $text, string $path): void
+    {
+        throw_if(
+            fwrite($out, $text) !== strlen($text),
+            RuntimeException::class,
+            "Unable to write the render to {$path}. Check the free disk space",
+        );
     }
 
     /**

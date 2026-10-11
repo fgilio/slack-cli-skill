@@ -2,12 +2,15 @@
 
 use App\Archive\ArchiveRequest;
 use App\Archive\ChannelArchiver;
+use App\Archive\MarkdownRebuilder;
+use App\Archive\SlackNameResolver;
 use App\Commands\ArchiveRenderCommand;
 use App\Services\SlackClient;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Tester\CommandTester;
 use Tests\Support\ConsoleContainer;
 use Tests\Support\FakeSlackClient;
+use Tests\Support\ShortWriteStream;
 
 function renderTester(?SlackClient $client = null): CommandTester
 {
@@ -215,6 +218,24 @@ it('reports a check as JSON', function () {
 
     file_put_contents($dir.'/raw.md', $archived."stale\n");
     expect($tester->execute(['dir' => $dir, '--check' => true, '--json' => true]))->toBe(1);
+});
+
+it('leaves raw.md alone when the render cannot be written in full', function () {
+    $dir = archiveDir();
+    $archived = archivedWith(sharedClient(), $dir);
+    $rebuilder = new MarkdownRebuilder(new SlackNameResolver(sharedClient()));
+
+    stream_wrapper_register(ShortWriteStream::SCHEME, ShortWriteStream::class);
+
+    try {
+        expect(fn () => $rebuilder->rebuild(ShortWriteStream::SCHEME.'://'.$dir))
+            ->toThrow(RuntimeException::class, 'Unable to write the render');
+    } finally {
+        stream_wrapper_unregister(ShortWriteStream::SCHEME);
+    }
+
+    expect(file_get_contents($dir.'/raw.md'))->toBe($archived)
+        ->and(glob($dir.'/raw.md.*'))->toBe([]);
 });
 
 it('refuses a directory holding an interrupted archive run', function () {
