@@ -41,9 +41,10 @@ it('round trips every field it saves', function () {
     $saved->messagesBytes = 91234;
     $saved->markdownBytes = 5120;
     $saved->sinceTs = '1785542401.000100';
+    $saved->monthBytes = ['2026-07' => 4096, '2026-08' => 1024];
     $saved->save();
 
-    expect(ArchiveCheckpoint::load($path)?->toArray())->toBe($saved->toArray());
+    expect(ArchiveCheckpoint::load($path))->toEqual($saved);
 });
 
 it('reports no checkpoint for a directory without one', function () {
@@ -87,4 +88,24 @@ it('removes itself when a run finishes', function () {
     $stored->delete();
 
     expect(file_exists($path))->toBeFalse();
+});
+
+it('keeps a run that has no months yet on raw/', function () {
+    $path = checkpointPath();
+
+    $saved = checkpoint($path);
+    $saved->monthBytes = [];
+    $saved->save();
+
+    expect(ArchiveCheckpoint::load($path)?->monthBytes)->toBe([])
+        ->and(json_decode((string) file_get_contents($path), true))->toHaveKey('month_bytes');
+});
+
+it('reads a checkpoint written before raw/ existed as a run on the single raw.md', function () {
+    $path = checkpointPath();
+    $stored = checkpoint($path)->toArray();
+    unset($stored['month_bytes']);
+    file_put_contents($path, json_encode($stored));
+
+    expect(ArchiveCheckpoint::load($path)?->monthBytes)->toBeNull();
 });

@@ -16,7 +16,7 @@ function freshRunOutput(): array
     if ($output === null) {
         $dir = archiveDir();
         (new ChannelArchiver(pagedClient()))->archive(resumeRequest($dir));
-        $output = [archivedTimestamps($dir), (string) file_get_contents($dir.'/raw.md')];
+        $output = [archivedTimestamps($dir), rawCopy($dir)];
     }
 
     return $output;
@@ -37,7 +37,7 @@ function plantInterruptedRun(string $dir, array $pages, string $phase, ?string $
         Jsonl::writeAtomic(sprintf('%s/.archive-tmp/pages/page-%06d.jsonl', $dir, $index), array_reverse($page));
     }
 
-    $checkpoint = new ArchiveCheckpoint($dir.'/.archive-checkpoint.json', 'C47JM9E9K', null, null, true, false);
+    $checkpoint = new ArchiveCheckpoint($dir.'/.archive-checkpoint.json', 'C47JM9E9K', null, null, true, false, monthBytes: []);
     $checkpoint->phase = $phase;
     $checkpoint->cursor = $cursor;
     $checkpoint->pageCount = $pageCount ?? count($pages);
@@ -85,7 +85,7 @@ it('resumes a run that died mid-history in chronological order', function () {
     [$fresh, $freshMarkdown] = freshRunOutput();
 
     expect(archivedTimestamps($dir))->toBe($fresh)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($freshMarkdown);
+        ->and(rawCopy($dir))->toBe($freshMarkdown);
 });
 
 it('picks up at the page the interrupted run was about to fetch', function () {
@@ -122,7 +122,7 @@ it('does not refetch the channel when the cursor is already spent', function () 
 
     expect($client->cursorsRequested)->toBe([])
         ->and(archivedTimestamps($dir))->toBe($fresh)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($freshMarkdown);
+        ->and(rawCopy($dir))->toBe($freshMarkdown);
 });
 
 it('never stores a spent cursor while it still says it is fetching', function () {
@@ -162,7 +162,7 @@ it('resumes a run killed part way through the ordering pass', function () {
     [$fresh, $freshMarkdown] = freshRunOutput();
 
     expect(archivedTimestamps($dir))->toBe($fresh)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($freshMarkdown);
+        ->and(rawCopy($dir))->toBe($freshMarkdown);
 });
 
 it('resumes a run killed part way through the thread pass', function () {
@@ -184,7 +184,7 @@ it('resumes a run killed part way through the thread pass', function () {
     [$fresh, $freshMarkdown] = freshRunOutput();
 
     expect(archivedTimestamps($again))->toBe($fresh)
-        ->and(file_get_contents($again.'/raw.md'))->toBe($freshMarkdown);
+        ->and(rawCopy($again))->toBe($freshMarkdown);
 });
 
 it('resumes a run killed part way through rendering', function () {
@@ -198,14 +198,16 @@ it('resumes a run killed part way through rendering', function () {
     $checkpoint->save();
 
     file_put_contents($dir.'/messages.jsonl', '{"ts":"1785575640.000100"}'."\n".'{"tor');
-    file_put_contents($dir.'/raw.md', "# sobras\nmedia línea");
+    mkdir($dir.'/raw');
+    file_put_contents($dir.'/raw/2026-08.md', "# sobras\nmedia línea");
+    file_put_contents($dir.'/raw/2026-09.md.part', '# sobras');
 
     (new ChannelArchiver(pagedClient()))->archive(resumeRequest($dir, resume: true));
 
     [$fresh, $freshMarkdown] = freshRunOutput();
 
     expect(archivedTimestamps($dir))->toBe($fresh)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($freshMarkdown);
+        ->and(rawCopy($dir))->toBe($freshMarkdown);
 });
 
 it('refuses to order a run whose pages went missing', function () {
@@ -238,7 +240,7 @@ it('survives being killed and resumed twice', function () {
     [$fresh, $freshMarkdown] = freshRunOutput();
 
     expect(archivedTimestamps($dir))->toBe($fresh)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($freshMarkdown);
+        ->and(rawCopy($dir))->toBe($freshMarkdown);
 });
 
 it('leaves nothing behind once a resumed run finishes', function () {

@@ -148,7 +148,7 @@ it('zeroes the counts of a failed entry in the summary', function () {
     ]);
 });
 
-it('runs an entry through the real archiver and leaves both files behind', function () {
+it('runs an entry through the real archiver and leaves messages.jsonl and raw/ behind', function () {
     $dir = archiveDir();
 
     $results = (new BatchRunner(new SlackEntryArchiver(fixtureClient())))->run([batchEntry('@gparra', $dir)]);
@@ -156,7 +156,8 @@ it('runs an entry through the real archiver and leaves both files behind', funct
     expect($results[0]->succeeded())->toBeTrue()
         ->and($results[0]->summary?->messages)->toBe(3)
         ->and(is_file($dir.'/messages.jsonl'))->toBeTrue()
-        ->and(is_file($dir.'/raw.md'))->toBeTrue();
+        ->and(array_keys(rawMonths($dir)))->toBe(['2026-08'])
+        ->and($results[0]->summary?->markdownPath)->toBe($dir.'/raw');
 });
 
 it('records the failure of a target it cannot resolve', function () {

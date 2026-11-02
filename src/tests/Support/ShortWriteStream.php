@@ -18,6 +18,9 @@ final class ShortWriteStream
 
     private bool $full = false;
 
+    /** @var list<string> */
+    private array $entries = [];
+
     public function stream_open(string $path, string $mode): bool
     {
         $handle = fopen(self::real($path), $mode);
@@ -45,6 +48,21 @@ final class ShortWriteStream
     public function stream_eof(): bool
     {
         return feof($this->handle);
+    }
+
+    public function stream_seek(int $offset, int $whence): bool
+    {
+        return fseek($this->handle, $offset, $whence) === 0;
+    }
+
+    public function stream_tell(): int
+    {
+        return (int) ftell($this->handle);
+    }
+
+    public function stream_truncate(int $size): bool
+    {
+        return ftruncate($this->handle, max(0, $size));
     }
 
     public function stream_flush(): bool
@@ -81,6 +99,44 @@ final class ShortWriteStream
     public function rename(string $from, string $to): bool
     {
         return rename(self::real($from), self::real($to));
+    }
+
+    public function mkdir(string $path, int $mode, int $options): bool
+    {
+        return mkdir(self::real($path), $mode, (bool) ($options & STREAM_MKDIR_RECURSIVE));
+    }
+
+    public function rmdir(string $path, int $options): bool
+    {
+        return rmdir(self::real($path));
+    }
+
+    public function dir_opendir(string $path, int $options): bool
+    {
+        $entries = scandir(self::real($path));
+
+        if ($entries === false) {
+            return false;
+        }
+
+        $this->entries = $entries;
+
+        return true;
+    }
+
+    public function dir_readdir(): string|false
+    {
+        return array_shift($this->entries) ?? false;
+    }
+
+    public function dir_closedir(): bool
+    {
+        return true;
+    }
+
+    public function dir_rewinddir(): bool
+    {
+        return false;
     }
 
     private static function real(string $path): string

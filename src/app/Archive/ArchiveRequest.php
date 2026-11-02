@@ -27,14 +27,9 @@ final class ArchiveRequest
         return $outDir.'/messages.jsonl';
     }
 
-    public function markdownPath(): string
+    public function monthsDir(): string
     {
-        return self::markdownPathIn($this->outDir);
-    }
-
-    public static function markdownPathIn(string $outDir): string
-    {
-        return $outDir.'/raw.md';
+        return RawMonths::dirIn($this->outDir);
     }
 
     public function checkpointPath(): string

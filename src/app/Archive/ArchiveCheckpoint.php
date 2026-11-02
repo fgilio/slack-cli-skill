@@ -9,6 +9,11 @@ use RuntimeException;
  *
  * Saved after every page that reaches disk, so an interrupted run
  * restarts at the page it was about to fetch rather than at zero.
+ *
+ * The byte marks record what the archive held before the run, so a
+ * render that died part way is cut back to them and written again.
+ * Month sizes are null for a directory still on the single raw.md,
+ * which is also what a checkpoint written before raw/ existed reads as.
  */
 final class ArchiveCheckpoint
 {
@@ -36,6 +41,8 @@ final class ArchiveCheckpoint
         public int $threadLine = 0,
         public int $messagesBytes = 0,
         public int $markdownBytes = 0,
+        /** @var array<string, int>|null */
+        public ?array $monthBytes = null,
     ) {}
 
     public static function load(string $path): ?self
@@ -64,7 +71,20 @@ final class ArchiveCheckpoint
             threadLine: (int) $decoded['thread_line'],
             messagesBytes: (int) $decoded['messages_bytes'],
             markdownBytes: (int) $decoded['markdown_bytes'],
+            monthBytes: self::monthBytesFrom($decoded['month_bytes'] ?? null),
         );
+    }
+
+    /**
+     * @return array<string, int>|null
+     */
+    private static function monthBytesFrom(mixed $raw): ?array
+    {
+        if (! is_array($raw)) {
+            return null;
+        }
+
+        return collect($raw)->map(fn (mixed $size): int => (int) $size)->all();
     }
 
     public function save(): void
@@ -111,6 +131,8 @@ final class ArchiveCheckpoint
             'thread_line' => $this->threadLine,
             'messages_bytes' => $this->messagesBytes,
             'markdown_bytes' => $this->markdownBytes,
+            // An empty map has to stay a JSON object to read back as monthly.
+            'month_bytes' => $this->monthBytes === null ? null : (object) $this->monthBytes,
         ];
     }
 }

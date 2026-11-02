@@ -16,7 +16,7 @@ const FLOOR_BEFORE_EVERYTHING = '1785000000.000000';
  */
 function markdownDays(string $dir): array
 {
-    preg_match_all('/^## (\d{4}-\d{2}-\d{2})$/m', (string) file_get_contents($dir.'/raw.md'), $found);
+    preg_match_all('/^## (\d{4}-\d{2}-\d{2})$/m', rawCopy($dir), $found);
 
     return $found[1];
 }
@@ -73,7 +73,7 @@ it('gives a floored run the same archive as an unfloored one', function () {
     (new ChannelArchiver(pagedClient()))->archive(resumeRequest($unfloored));
 
     expect(archivedTimestamps($floored))->toBe(archivedTimestamps($unfloored))
-        ->and(file_get_contents($floored.'/raw.md'))->toBe(file_get_contents($unfloored.'/raw.md'));
+        ->and(rawCopy($floored))->toBe(rawCopy($unfloored));
 });
 
 it('resumes a floored run killed mid-history in strict chronological order', function () {
@@ -94,7 +94,7 @@ it('resumes a floored run killed mid-history in strict chronological order', fun
 
     expect(orderInversions(topLevelTimestamps($dir)))->toBe(0)
         ->and(archivedTimestamps($dir))->toBe(archivedTimestamps($unfloored))
-        ->and(file_get_contents($dir.'/raw.md'))->toBe(file_get_contents($unfloored.'/raw.md'));
+        ->and(rawCopy($dir))->toBe(rawCopy($unfloored));
 });
 
 it('resumes an unfloored run killed mid-history in strict chronological order', function () {

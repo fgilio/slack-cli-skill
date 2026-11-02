@@ -17,7 +17,7 @@ slack-cli channels:info <channel>   # Channel details + members
 slack-cli messages:history <channel> # Read messages
 slack-cli archive <target>          # Dump a whole conversation to disk
 slack-cli archive:batch <manifest>  # Refresh many archives from one manifest
-slack-cli archive:render <dir>      # Rebuild raw.md from messages.jsonl
+slack-cli archive:render <dir>      # Render raw/ from messages.jsonl
 slack-cli thread:read <url>         # Read thread from URL
 slack-cli search <query>            # Search messages
 slack-cli users:lookup <query>      # Find users
@@ -39,11 +39,11 @@ slack-cli thread:read "https://workspace.slack.com/archives/C01234/p1234567890"
 # Search with filters
 slack-cli search "bug" --in=engineering --from=john --after=2024-01-01
 
-# Archive a conversation to messages.jsonl + raw.md, then refresh it later
+# Archive a conversation to messages.jsonl + raw/YYYY-MM.md, then refresh it later
 slack-cli archive '#eng-leadership' --after=2026-01-01 --out=./eng-leadership
 slack-cli archive '#eng-leadership' --since-last --out=./eng-leadership
 
-# Rebuild raw.md from the messages.jsonl already on disk, without fetching anything
+# Render raw/ from the messages.jsonl already on disk, without fetching anything
 slack-cli archive:render ./eng-leadership
 slack-cli archive:render ./eng-leadership --check   # compare only, write nothing
 

@@ -18,7 +18,7 @@ use RuntimeException;
  *   history  fetch conversations.history page by page, one file per page
  *   order    replay the pages by timestamp into one oldest-first file
  *   threads  fetch conversations.replies for every message that has any
- *   render   append the ordered stream to messages.jsonl and raw.md
+ *   render   append the ordered stream to messages.jsonl and raw/
  *
  * Nothing accumulates in memory beyond one page and one thread, so the
  * cost of archiving a channel is the same whether it holds 500 messages
@@ -127,6 +127,8 @@ final class ChannelArchiver
         $this->emptyDirectory($request->workDir().'/pages');
         $this->emptyDirectory($request->workDir().'/threads');
 
+        $legacy = RawMonths::isLegacy($request->outDir);
+
         $checkpoint = new ArchiveCheckpoint(
             path: $request->checkpointPath(),
             channelId: $request->channelId,
@@ -136,7 +138,14 @@ final class ChannelArchiver
             sinceLast: $request->sinceLast,
             sinceTs: $sinceTs,
             messagesBytes: $archived,
-            markdownBytes: is_file($request->markdownPath()) ? (int) filesize($request->markdownPath()) : 0,
+            markdownBytes: $legacy ? (int) filesize(RawMonths::legacyPathIn($request->outDir)) : 0,
+            // A refresh only ever appends to raw/, while any other run writes
+            // it whole, so only a refresh has months to keep.
+            monthBytes: match (true) {
+                $legacy => null,
+                $sinceTs !== null => RawMonths::sizesIn($request->monthsDir()),
+                default => [],
+            },
         );
 
         $checkpoint->save();
@@ -392,7 +401,8 @@ final class ChannelArchiver
     private function render(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, Closure $progress): ArchiveSummary
     {
         $names = $this->names();
-        $timezone = $this->timezone();
+        $openMonth = $this->openMonth($request, $checkpoint);
+        $timezone = $this->archivedTimezone($request, $checkpoint, $openMonth) ?? $this->timezone();
 
         $renderer = new MarkdownRenderer(
             new SlackMarkup($names),
@@ -400,18 +410,13 @@ final class ChannelArchiver
             $timezone,
             // An incremental run continues under the day header the previous
             // run left open, so a same-day refresh does not repeat it.
-            $checkpoint->sinceTs !== null ? MarkdownRenderer::dayOf($checkpoint->sinceTs, $timezone) : null,
+            $checkpoint->sinceTs !== null && ($checkpoint->monthBytes === null || $openMonth !== null)
+                ? MarkdownRenderer::dayOf($checkpoint->sinceTs, $timezone)
+                : null,
         );
 
         $messages = $this->openAt($request->messagesPath(), $checkpoint->messagesBytes);
-        $markdown = $this->openAt($request->markdownPath(), $checkpoint->markdownBytes);
-
-        if ($checkpoint->markdownBytes === 0) {
-            fwrite($markdown, $renderer->header(
-                $this->channelLabel($request->channelId),
-                ...$this->windowLabels($request),
-            ));
-        }
+        $markdown = $this->openRawSink($request, $checkpoint, $renderer, $openMonth);
 
         $written = 0;
         $threads = 0;
@@ -460,7 +465,7 @@ final class ChannelArchiver
                 fwrite($messages, Jsonl::encode($reply)."\n");
             }
 
-            fwrite($markdown, $renderer->message($message, $replies));
+            $markdown->write($renderer->message($message, $replies));
 
             $written++;
             $replyCount += count($replies);
@@ -471,11 +476,7 @@ final class ChannelArchiver
         }
 
         fclose($messages);
-        fclose($markdown);
-
-        if ($checkpoint->sinceTs !== null && $lastDay !== null) {
-            $this->refreshHeaderRange($request->markdownPath(), $lastDay);
-        }
+        $markdown->close($checkpoint->sinceTs !== null ? $lastDay : null);
 
         $progress("Wrote {$written} messages and {$replyCount} replies.");
 
@@ -489,8 +490,67 @@ final class ChannelArchiver
             firstDay: $firstDay,
             lastDay: $lastDay,
             messagesPath: $request->messagesPath(),
-            markdownPath: $request->markdownPath(),
+            markdownPath: $markdown->path(),
         );
+    }
+
+    /**
+     * Cut raw/ back to the mark the run started from, and name the month
+     * the run appends to: the newest one a refresh found, if any.
+     */
+    private function openMonth(ArchiveRequest $request, ArchiveCheckpoint $checkpoint): ?string
+    {
+        if ($checkpoint->monthBytes === null) {
+            return null;
+        }
+
+        RawMonths::cutBackTo($request->monthsDir(), $checkpoint->monthBytes);
+
+        $months = array_keys($checkpoint->monthBytes);
+        sort($months);
+
+        return $months === [] ? null : end($months);
+    }
+
+    /**
+     * The timezone in the header of the file a refresh appends to. Its days
+     * and months were cut in that timezone, so the appended days must be
+     * too, whatever the user's Slack profile says today.
+     */
+    private function archivedTimezone(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, ?string $openMonth): ?DateTimeZone
+    {
+        $path = match (true) {
+            $checkpoint->monthBytes === null => $checkpoint->markdownBytes > 0 ? RawMonths::legacyPathIn($request->outDir) : null,
+            $openMonth !== null => RawMonths::pathOf($request->monthsDir(), $openMonth),
+            default => null,
+        };
+
+        $header = $path === null ? null : ArchiveHeader::read($path);
+
+        return $header === null ? null : new DateTimeZone($header->timezone);
+    }
+
+    private function openRawSink(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, MarkdownRenderer $renderer, ?string $openMonth): RawSink
+    {
+        if ($checkpoint->monthBytes === null) {
+            return LegacyRawFile::openAt(
+                RawMonths::legacyPathIn($request->outDir),
+                $checkpoint->markdownBytes,
+                $checkpoint->markdownBytes === 0
+                    ? $renderer->header($this->channelLabel($request->channelId), ...$this->windowLabels($request))
+                    : null,
+            );
+        }
+
+        if ($openMonth !== null) {
+            return MonthSplitter::continuing($request->monthsDir(), $openMonth);
+        }
+
+        return MonthSplitter::fresh($request->monthsDir(), $renderer->archiveHeader(
+            $this->channelLabel($request->channelId),
+            $this->client->getWorkspaceName(),
+            $this->channelMeta($request->channelId),
+        ));
     }
 
     /**
@@ -544,54 +604,6 @@ final class ChannelArchiver
         return $ts !== null
             ? MarkdownRenderer::dayOf($ts, $this->timezone())
             : (new DateTimeImmutable('now', $this->timezone()))->format('Y-m-d');
-    }
-
-    /**
-     * Rewrite the header's closing date without loading the file into memory.
-     */
-    private function refreshHeaderRange(string $path, string $lastDay): void
-    {
-        $handle = fopen($path, 'rb');
-
-        if ($handle === false) {
-            return;
-        }
-
-        $line = fgets($handle);
-        $title = $line === false ? null : ArchiveHeader::parseTitle($line);
-
-        if ($title === null) {
-            fclose($handle);
-
-            return;
-        }
-
-        [$channelLabel, $from, $to] = $title;
-
-        if ($to === $lastDay) {
-            fclose($handle);
-
-            return;
-        }
-
-        $temp = $path.'.part';
-        $out = fopen($temp, 'wb');
-
-        if ($out === false) {
-            fclose($handle);
-
-            return;
-        }
-
-        fwrite($out, ArchiveHeader::title($channelLabel, $from, $lastDay)."\n");
-
-        while (($line = fgets($handle)) !== false) {
-            fwrite($out, $line);
-        }
-
-        fclose($handle);
-        fclose($out);
-        rename($temp, $path);
     }
 
     // =========================================================================
