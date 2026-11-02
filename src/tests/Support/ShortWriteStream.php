@@ -50,6 +50,21 @@ final class ShortWriteStream
         return feof($this->handle);
     }
 
+    public function stream_seek(int $offset, int $whence): bool
+    {
+        return fseek($this->handle, $offset, $whence) === 0;
+    }
+
+    public function stream_tell(): int
+    {
+        return (int) ftell($this->handle);
+    }
+
+    public function stream_truncate(int $size): bool
+    {
+        return ftruncate($this->handle, max(0, $size));
+    }
+
     public function stream_flush(): bool
     {
         return fflush($this->handle);

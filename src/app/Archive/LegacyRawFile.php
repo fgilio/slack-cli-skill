@@ -122,14 +122,25 @@ final class LegacyRawFile implements RawSink
             return;
         }
 
-        fwrite($out, ArchiveHeader::title($channelLabel, $from, $lastDay)."\n");
+        $title = ArchiveHeader::title($channelLabel, $from, $lastDay)."\n";
+        $complete = fwrite($out, $title) === strlen($title);
 
-        while (($line = fgets($handle)) !== false) {
-            fwrite($out, $line);
+        while ($complete && ($line = fgets($handle)) !== false) {
+            $complete = fwrite($out, $line) === strlen($line);
         }
 
         fclose($handle);
+        $complete = fflush($out) && $complete;
         fclose($out);
-        rename($temp, $path);
+
+        // The checkpoint is gone once the run ends, so a cut copy moved over
+        // raw.md could not be resumed away.
+        if (! $complete) {
+            @unlink($temp);
+
+            throw new RuntimeException("Unable to move the closing date of {$path} forward. Check the free disk space");
+        }
+
+        throw_unless(rename($temp, $path), RuntimeException::class, "Unable to move {$temp} into place at {$path}");
     }
 }

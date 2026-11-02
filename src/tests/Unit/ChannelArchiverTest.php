@@ -5,7 +5,9 @@ use App\Archive\ArchiveMetadata;
 use App\Archive\ArchiveRequest;
 use App\Archive\ChannelArchiver;
 use App\Archive\Jsonl;
+use App\Archive\LegacyRawFile;
 use Tests\Support\FakeSlackClient;
+use Tests\Support\ShortWriteStream;
 
 function archiveRequest(string $dir, array $overrides = []): ArchiveRequest
 {
@@ -243,3 +245,23 @@ it('records in the metadata whether the run nested thread replies', function (bo
 
     expect(ArchiveMetadata::load($dir)?->threadSegments)->toBe([['after' => null, 'nested' => $threads]]);
 })->with([true, false]);
+
+it('keeps raw.md whole when its closing date cannot be moved forward', function () {
+    $dir = archiveDir();
+    (new ChannelArchiver(fixtureClient()))->archive(archiveRequest($dir));
+    $legacy = toLegacyLayout($dir);
+
+    stream_wrapper_register(ShortWriteStream::SCHEME, ShortWriteStream::class);
+
+    try {
+        $file = LegacyRawFile::openAt(ShortWriteStream::SCHEME.'://'.$dir.'/raw.md', strlen($legacy));
+
+        expect(fn () => $file->close('2026-08-03'))
+            ->toThrow(RuntimeException::class, 'Unable to move the closing date');
+    } finally {
+        stream_wrapper_unregister(ShortWriteStream::SCHEME);
+    }
+
+    expect(file_get_contents($dir.'/raw.md'))->toBe($legacy)
+        ->and(is_file($dir.'/raw.md.part'))->toBeFalse();
+});
