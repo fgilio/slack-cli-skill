@@ -25,13 +25,7 @@ final class MarkdownRebuilder
         [$header, $metadata, $messagesPath, $markdownPath] = $this->sources($outDir);
         $temp = $markdownPath.'.part';
 
-        try {
-            $summary = $this->write($header, $metadata, $messagesPath, $temp);
-        } catch (Throwable $e) {
-            @unlink($temp);
-
-            throw $e;
-        }
+        $summary = $this->render($header, $metadata, $messagesPath, LegacyRawFile::openAt($temp, 0, $header->toMarkdown()));
 
         throw_unless(
             rename($temp, $markdownPath),
@@ -39,18 +33,7 @@ final class MarkdownRebuilder
             "Unable to move the rebuilt {$temp} into place at {$markdownPath}",
         );
 
-        return new ArchiveSummary(
-            channelId: $metadata->channelId ?? $header->channelLabel,
-            channelLabel: $header->channelLabel,
-            messages: $summary['messages'],
-            threads: $summary['threads'],
-            replies: $summary['replies'],
-            skipped: 0,
-            firstDay: $summary['first_day'],
-            lastDay: $summary['last_day'],
-            messagesPath: $messagesPath,
-            markdownPath: $markdownPath,
-        );
+        return $this->summary($header, $metadata, $messagesPath, $markdownPath, $summary);
     }
 
     /**
@@ -66,7 +49,7 @@ final class MarkdownRebuilder
         throw_if($temp === false, RuntimeException::class, 'Unable to create a temporary file for the render');
 
         try {
-            $this->write($header, $metadata, $messagesPath, $temp);
+            $this->render($header, $metadata, $messagesPath, LegacyRawFile::openAt($temp, 0, $header->toMarkdown()));
 
             return $this->firstDifferentLine($markdownPath, $temp);
         } finally {
@@ -132,23 +115,39 @@ final class MarkdownRebuilder
     }
 
     /**
+     * @param  array{messages: int, threads: int, replies: int, first_day: ?string, last_day: ?string}  $summary
+     */
+    private function summary(ArchiveHeader $header, ?ArchiveMetadata $metadata, string $messagesPath, string $markdownPath, array $summary): ArchiveSummary
+    {
+        return new ArchiveSummary(
+            channelId: $metadata->channelId ?? $header->channelLabel,
+            channelLabel: $header->channelLabel,
+            messages: $summary['messages'],
+            threads: $summary['threads'],
+            replies: $summary['replies'],
+            skipped: 0,
+            firstDay: $summary['first_day'],
+            lastDay: $summary['last_day'],
+            messagesPath: $messagesPath,
+            markdownPath: $markdownPath,
+        );
+    }
+
+    /**
+     * Stream every message into the sink. A render that fails part way
+     * leaves nothing behind for a later run to mistake for a whole one.
+     *
      * @return array{messages: int, threads: int, replies: int, first_day: ?string, last_day: ?string}
      */
-    private function write(ArchiveHeader $header, ?ArchiveMetadata $metadata, string $messagesPath, string $temp): array
+    private function render(ArchiveHeader $header, ?ArchiveMetadata $metadata, string $messagesPath, RawSink $sink): array
     {
         $renderer = new MarkdownRenderer(new SlackMarkup($this->names), $this->names, new DateTimeZone($header->timezone));
-
-        $out = fopen($temp, 'wb');
-
-        throw_if($out === false, RuntimeException::class, "Unable to write the archive file at {$temp}");
 
         $summary = ['messages' => 0, 'threads' => 0, 'replies' => 0, 'first_day' => null, 'last_day' => null];
 
         try {
-            $this->append($out, $header->toMarkdown(), $temp);
-
             foreach ($this->threads($messagesPath, $metadata ?? new ArchiveMetadata('', '')) as [$message, $replies]) {
-                $this->append($out, $renderer->message($message, $replies), $temp);
+                $sink->write($renderer->message($message, $replies));
 
                 $day = $renderer->day((string) Arr::get($message, 'ts', '0'));
 
@@ -159,27 +158,14 @@ final class MarkdownRebuilder
                 $summary['last_day'] = $day;
             }
 
-            throw_unless(fflush($out), RuntimeException::class, "Unable to finish writing the render at {$temp}. Check the free disk space");
-        } finally {
-            fclose($out);
+            $sink->close();
+        } catch (Throwable $e) {
+            $sink->abort();
+
+            throw $e;
         }
 
         return $summary;
-    }
-
-    /**
-     * A full disk makes fwrite() write less than it was given. A cut render
-     * must never be compared with raw.md or moved into its place.
-     *
-     * @param  resource  $out
-     */
-    private function append($out, string $text, string $path): void
-    {
-        throw_if(
-            fwrite($out, $text) !== strlen($text),
-            RuntimeException::class,
-            "Unable to write the render to {$path}. Check the free disk space",
-        );
     }
 
     /**

@@ -404,14 +404,13 @@ final class ChannelArchiver
         );
 
         $messages = $this->openAt($request->messagesPath(), $checkpoint->messagesBytes);
-        $markdown = $this->openAt($request->markdownPath(), $checkpoint->markdownBytes);
-
-        if ($checkpoint->markdownBytes === 0) {
-            fwrite($markdown, $renderer->header(
-                $this->channelLabel($request->channelId),
-                ...$this->windowLabels($request),
-            ));
-        }
+        $markdown = LegacyRawFile::openAt(
+            $request->markdownPath(),
+            $checkpoint->markdownBytes,
+            $checkpoint->markdownBytes === 0
+                ? $renderer->header($this->channelLabel($request->channelId), ...$this->windowLabels($request))
+                : null,
+        );
 
         $written = 0;
         $threads = 0;
@@ -460,7 +459,7 @@ final class ChannelArchiver
                 fwrite($messages, Jsonl::encode($reply)."\n");
             }
 
-            fwrite($markdown, $renderer->message($message, $replies));
+            $markdown->write($renderer->message($message, $replies));
 
             $written++;
             $replyCount += count($replies);
@@ -471,11 +470,7 @@ final class ChannelArchiver
         }
 
         fclose($messages);
-        fclose($markdown);
-
-        if ($checkpoint->sinceTs !== null && $lastDay !== null) {
-            $this->refreshHeaderRange($request->markdownPath(), $lastDay);
-        }
+        $markdown->close($checkpoint->sinceTs !== null ? $lastDay : null);
 
         $progress("Wrote {$written} messages and {$replyCount} replies.");
 
@@ -489,7 +484,7 @@ final class ChannelArchiver
             firstDay: $firstDay,
             lastDay: $lastDay,
             messagesPath: $request->messagesPath(),
-            markdownPath: $request->markdownPath(),
+            markdownPath: $markdown->path(),
         );
     }
 
@@ -544,54 +539,6 @@ final class ChannelArchiver
         return $ts !== null
             ? MarkdownRenderer::dayOf($ts, $this->timezone())
             : (new DateTimeImmutable('now', $this->timezone()))->format('Y-m-d');
-    }
-
-    /**
-     * Rewrite the header's closing date without loading the file into memory.
-     */
-    private function refreshHeaderRange(string $path, string $lastDay): void
-    {
-        $handle = fopen($path, 'rb');
-
-        if ($handle === false) {
-            return;
-        }
-
-        $line = fgets($handle);
-        $title = $line === false ? null : ArchiveHeader::parseTitle($line);
-
-        if ($title === null) {
-            fclose($handle);
-
-            return;
-        }
-
-        [$channelLabel, $from, $to] = $title;
-
-        if ($to === $lastDay) {
-            fclose($handle);
-
-            return;
-        }
-
-        $temp = $path.'.part';
-        $out = fopen($temp, 'wb');
-
-        if ($out === false) {
-            fclose($handle);
-
-            return;
-        }
-
-        fwrite($out, ArchiveHeader::title($channelLabel, $from, $lastDay)."\n");
-
-        while (($line = fgets($handle)) !== false) {
-            fwrite($out, $line);
-        }
-
-        fclose($handle);
-        fclose($out);
-        rename($temp, $path);
     }
 
     // =========================================================================
