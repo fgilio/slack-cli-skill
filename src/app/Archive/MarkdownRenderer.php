@@ -7,7 +7,7 @@ use DateTimeZone;
 use Illuminate\Support\Arr;
 
 /**
- * Renders an archive as the reading copy (raw.md).
+ * Renders an archive as its reading copy, the raw/ month files.
  *
  * The renderer is a stream: it emits one chunk per channel message and
  * remembers only the day it last wrote, so a million-message archive
@@ -28,8 +28,12 @@ final class MarkdownRenderer
 
     public function header(string $channelLabel, string $from, string $to, string $workspace, string $channelMeta): string
     {
-        return (new ArchiveHeader($channelLabel, $from, $to, $workspace, $channelMeta, $this->timezone->getName()))
-            ->toMarkdown();
+        return $this->archiveHeader($channelLabel, $workspace, $channelMeta, $from, $to)->toMarkdown();
+    }
+
+    public function archiveHeader(string $channelLabel, string $workspace, string $channelMeta, ?string $from = null, ?string $to = null): ArchiveHeader
+    {
+        return new ArchiveHeader($channelLabel, $workspace, $channelMeta, $this->timezone->getName(), $from, $to);
     }
 
     /**

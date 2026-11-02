@@ -1,91 +1,19 @@
 <?php
 
 use App\Archive\ArchiveRequest;
-use App\Archive\ChannelArchiver;
 use App\Archive\MarkdownRebuilder;
 use App\Archive\SlackNameResolver;
-use App\Commands\ArchiveRenderCommand;
-use App\Services\SlackClient;
-use Symfony\Component\Console\Input\InputOption;
-use Symfony\Component\Console\Tester\CommandTester;
-use Tests\Support\ConsoleContainer;
 use Tests\Support\FakeSlackClient;
 use Tests\Support\ShortWriteStream;
 
-function renderTester(?SlackClient $client = null): CommandTester
-{
-    $command = new ArchiveRenderCommand($client ?? sharedClient());
-    $command->setLaravel(new ConsoleContainer);
-    $command->getDefinition()->addOption(new InputOption('json', null, InputOption::VALUE_NONE));
-
-    return new CommandTester($command);
-}
-
-/**
- * A thread whose replies carry thread_ts the way Slack sends them, a
- * message shared without a comment, and a reply also sent to the channel.
- *
- * @param  list<list<array<string, mixed>>>  $laterPages  Newest page first.
- */
-function sharedClient(array $laterPages = []): FakeSlackClient
-{
-    return new FakeSlackClient(
-        pages: [
-            ...$laterPages,
-            [
-                ['ts' => TS_NEXT_DAY, 'user' => 'U01', 'text' => 'seguimos mañana'],
-                [
-                    'ts' => TS_0930,
-                    'user' => 'U02',
-                    'text' => '',
-                    'attachments' => [[
-                        'is_share' => true,
-                        'is_msg_unfurl' => true,
-                        'ts' => TS_0914,
-                        'author_name' => 'Franco Gilio',
-                        'text' => "¿arrancamos?\nhoy",
-                    ]],
-                ],
-                [
-                    'ts' => TS_0920,
-                    'user' => 'U02',
-                    'text' => 'dale',
-                    'thread_ts' => TS_0914,
-                    'subtype' => 'thread_broadcast',
-                ],
-                ['ts' => TS_0914, 'user' => 'U01', 'text' => '¿arrancamos?', 'thread_ts' => TS_0914, 'reply_count' => 1],
-            ],
-        ],
-        threads: [
-            TS_0914 => [
-                ['ts' => TS_0914, 'user' => 'U01', 'text' => '¿arrancamos?', 'thread_ts' => TS_0914],
-                ['ts' => TS_0920, 'user' => 'U02', 'text' => 'dale', 'thread_ts' => TS_0914, 'subtype' => 'thread_broadcast'],
-            ],
-        ],
-        users: ['U01' => 'Franco Gilio', 'U02' => 'Ana Pérez'],
-    );
-}
-
-function archivedWith(FakeSlackClient $client, string $dir, bool $threads = true, bool $sinceLast = false): string
-{
-    (new ChannelArchiver($client))->archive(new ArchiveRequest(
-        channelId: 'C47JM9E9K',
-        outDir: $dir,
-        includeThreads: $threads,
-        sinceLast: $sinceLast,
-    ));
-
-    return (string) file_get_contents($dir.'/raw.md');
-}
-
-it('writes the same raw.md the archive run wrote', function () {
+it('writes the same raw/ the archive run wrote', function () {
     $dir = archiveDir();
     $archived = archivedWith(sharedClient(), $dir);
 
-    file_put_contents($dir.'/raw.md', strtok($archived, "\n")."\n\nWorkspace: publica.la. Canal privado, 12 miembros.\nHorarios en UTC .\n\nstale body\n");
+    file_put_contents($dir.'/raw/2026-08.md', "# #eng-leadership — 2026-08\n\nWorkspace: publica.la. Canal privado, 12 miembros.\nHorarios en UTC .\n\n## 2026-08-01\n\nstale body\n");
 
     expect(renderTester()->execute(['dir' => $dir]))->toBe(0)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($archived)
+        ->and(rawCopy($dir))->toBe($archived)
         ->and($archived)->toContain(
             "**09:14 Franco Gilio:** ¿arrancamos?\n"
             ."  > **09:20 Ana Pérez:** dale\n"
@@ -103,7 +31,7 @@ it('renders an archive extended with --since-last as one continuous copy', funct
     $extended = archivedWith(sharedClient($later), $dir, sinceLast: true);
 
     expect(renderTester()->execute(['dir' => $dir]))->toBe(0)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($extended)
+        ->and(rawCopy($dir))->toBe($extended)
         ->and(substr_count($extended, '## 2026-08-02'))->toBe(1);
 });
 
@@ -112,7 +40,7 @@ it('keeps a reply sent to the channel on its own line when the run skipped threa
     $archived = archivedWith(sharedClient(), $dir, threads: false);
 
     expect(renderTester()->execute(['dir' => $dir]))->toBe(0)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($archived)
+        ->and(rawCopy($dir))->toBe($archived)
         ->and($archived)->toContain("\n**09:20 Ana Pérez:** dale\n");
 });
 
@@ -134,7 +62,7 @@ it('renders each segment of an archive with the thread setting of the run that w
     ), $dir, threads: $later, sinceLast: true);
 
     expect(renderTester()->execute(['dir' => $dir]))->toBe(0)
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($extended);
+        ->and(rawCopy($dir))->toBe($extended);
 })->with([
     'threads, then --no-threads' => [true, false],
     '--no-threads, then threads' => [false, true],
@@ -148,7 +76,7 @@ it('nests replies when the metadata predates the thread settings', function () {
 
     renderTester()->execute(['dir' => $dir]);
 
-    expect(file_get_contents($dir.'/raw.md'))->toBe($archived);
+    expect(rawCopy($dir))->toBe($archived);
 });
 
 it('leaves messages.jsonl untouched', function () {
@@ -190,37 +118,75 @@ it('reports what it rendered', function () {
     ]);
 });
 
-it('checks raw.md against a fresh render and writes nothing', function () {
+it('checks raw/ against a fresh render and writes nothing', function () {
     $dir = archiveDir();
-    $archived = archivedWith(sharedClient(), $dir);
+    archivedWith(sharedClient(), $dir);
     $tester = renderTester();
 
     expect($tester->execute(['dir' => $dir, '--check' => true]))->toBe(0)
-        ->and($tester->getDisplay())->toContain('matches its messages.jsonl');
+        ->and($tester->getDisplay())->toContain('raw/ in '.$dir.' matches its messages.jsonl');
 
-    $edited = str_replace('seguimos mañana', 'seguimos el lunes', $archived);
+    $edited = str_replace('seguimos mañana', 'seguimos el lunes', rawMonths($dir)['2026-08']);
     $line = array_key_first(preg_grep('/seguimos el lunes/', explode("\n", $edited))) + 1;
-    file_put_contents($dir.'/raw.md', $edited);
+    file_put_contents($dir.'/raw/2026-08.md', $edited);
 
     expect($tester->execute(['dir' => $dir, '--check' => true]))->toBe(1)
-        ->and($tester->getDisplay())->toContain("first at line {$line}")
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($edited)
-        ->and(glob($dir.'/raw.md.*'))->toBe([]);
+        ->and($tester->getDisplay())->toContain("differs from a render of its messages.jsonl: raw/2026-08.md:{$line}.")
+        ->and(rawMonths($dir))->toBe(['2026-08' => $edited])
+        ->and(glob($dir.'/raw/*.part'))->toBe([])
+        ->and(is_dir($dir.'/.raw-render'))->toBeFalse();
+});
+
+it('reports a month missing from raw/', function () {
+    $dir = archiveDir();
+    archivedWith(sharedClient(crossMonthPages()), $dir);
+    unlink($dir.'/raw/2026-09.md');
+
+    $tester = renderTester();
+
+    expect($tester->execute(['dir' => $dir, '--check' => true]))->toBe(1)
+        ->and($tester->getDisplay())->toContain(': missing raw/2026-09.md.');
+});
+
+it('reports a month in raw/ that no message falls in', function () {
+    $dir = archiveDir();
+    archivedWith(sharedClient(), $dir);
+    copy($dir.'/raw/2026-08.md', $dir.'/raw/2026-07.md');
+
+    $tester = renderTester();
+
+    expect($tester->execute(['dir' => $dir, '--check' => true]))->toBe(1)
+        ->and($tester->getDisplay())->toContain(': unexpected raw/2026-07.md.');
 });
 
 it('reports a check as JSON', function () {
     $dir = archiveDir();
-    $archived = archivedWith(sharedClient(), $dir);
+    archivedWith(sharedClient(), $dir);
     $tester = renderTester();
 
     $tester->execute(['dir' => $dir, '--check' => true, '--json' => true]);
     expect(json_decode($tester->getDisplay(), true)['data'])->toBe(['matches' => true]);
 
-    file_put_contents($dir.'/raw.md', $archived."stale\n");
+    file_put_contents($dir.'/raw/2026-08.md', "stale\n", FILE_APPEND);
+
     expect($tester->execute(['dir' => $dir, '--check' => true, '--json' => true]))->toBe(1);
 });
 
-it('leaves raw.md alone when the render cannot be written in full', function () {
+it('describes a difference by file and line', function () {
+    $dir = archiveDir();
+    archivedWith(sharedClient(), $dir);
+
+    file_put_contents($dir.'/raw/2026-08.md', "stale\n", FILE_APPEND);
+    $lines = substr_count(rawMonths($dir)['2026-08'], "\n");
+
+    expect((new MarkdownRebuilder(new SlackNameResolver(sharedClient())))->firstDifference($dir)?->toArray())->toBe([
+        'difference' => "raw/2026-08.md:{$lines}",
+        'file' => 'raw/2026-08.md',
+        'line' => $lines,
+    ]);
+});
+
+it('leaves raw/ alone when the render cannot be written in full', function () {
     $dir = archiveDir();
     $archived = archivedWith(sharedClient(), $dir);
     $rebuilder = new MarkdownRebuilder(new SlackNameResolver(sharedClient()));
@@ -234,8 +200,9 @@ it('leaves raw.md alone when the render cannot be written in full', function () 
         stream_wrapper_unregister(ShortWriteStream::SCHEME);
     }
 
-    expect(file_get_contents($dir.'/raw.md'))->toBe($archived)
-        ->and(glob($dir.'/raw.md.*'))->toBe([]);
+    expect(rawCopy($dir))->toBe($archived)
+        ->and(glob($dir.'/raw/*.part'))->toBe([])
+        ->and(is_dir($dir.'/.raw-render'))->toBeFalse();
 });
 
 it('refuses a directory holding an interrupted archive run', function () {
@@ -248,21 +215,47 @@ it('refuses a directory holding an interrupted archive run', function () {
 
     expect($tester->execute(['dir' => $dir]))->toBe(1)
         ->and($tester->getDisplay())->toContain('holds an interrupted archive run')
-        ->and(file_get_contents($dir.'/raw.md'))->toBe($archived);
+        ->and(rawCopy($dir))->toBe($archived);
 });
 
-it('refuses a raw.md without an archive header', function () {
+it('refuses a month file without an archive header', function () {
     $dir = archiveDir();
     archivedWith(sharedClient(), $dir);
+
+    file_put_contents($dir.'/raw/2026-08.md', "# Notas\n");
+
+    $tester = renderTester();
+
+    expect($tester->execute(['dir' => $dir]))->toBe(1)
+        ->and($tester->getDisplay())->toContain('Unable to read the archive header at the top of '.$dir.'/raw/2026-08.md')
+        ->and(rawMonths($dir))->toBe(['2026-08' => "# Notas\n"])
+        ->and(is_dir($dir.'/.raw-render'))->toBeFalse();
+});
+
+it('refuses a single raw.md without an archive header', function () {
+    $dir = archiveDir();
+    archivedWith(sharedClient(), $dir);
+    toLegacyLayout($dir);
 
     file_put_contents($dir.'/raw.md', "# Notas\n");
 
     $tester = renderTester();
 
     expect($tester->execute(['dir' => $dir]))->toBe(1)
-        ->and($tester->getDisplay())->toContain('Unable to read the archive header')
+        ->and($tester->getDisplay())->toContain('Unable to read the archive header at the top of '.$dir.'/raw.md')
         ->and(file_get_contents($dir.'/raw.md'))->toBe("# Notas\n")
-        ->and(is_file($dir.'/raw.md.part'))->toBeFalse();
+        ->and(is_dir($dir.'/raw'))->toBeFalse();
+});
+
+it('refuses messages with no header to render them under', function () {
+    $dir = archiveDir();
+    archivedWith(sharedClient(), $dir);
+    unlink($dir.'/raw/2026-08.md');
+
+    $tester = renderTester();
+
+    expect($tester->execute(['dir' => $dir]))->toBe(1)
+        ->and($tester->getDisplay())->toContain('Unable to read the archive header');
 });
 
 it('refuses a directory without messages.jsonl', function () {

@@ -32,8 +32,7 @@ it('writes both files, ordered oldest first, with replies under their parent', f
         ->and($summary->threads)->toBe(1)
         ->and($summary->replies)->toBe(1);
 
-    expect(file_get_contents($dir.'/raw.md'))->toBe(
-        "# #eng-leadership — Dump completo (2026-08-01 a 2026-08-02)\n\n"
+    expect(rawMonths($dir))->toBe(['2026-08' => "# #eng-leadership — 2026-08\n\n"
         ."Workspace: publica.la. Canal privado, 12 miembros.\n"
         ."Horarios en UTC .\n"
         ."\n## 2026-08-01\n"
@@ -41,8 +40,8 @@ it('writes both files, ordered oldest first, with replies under their parent', f
         ."  > **09:20 Ana Pérez:** dale\n"
         ."\n**09:30 Ana Pérez:** listo\n"
         ."\n## 2026-08-02\n"
-        ."\n**10:05 Franco Gilio:** seguimos mañana\n"
-    );
+        ."\n**10:05 Franco Gilio:** seguimos mañana\n",
+    ]);
 });
 
 it('writes a reply broadcast to the channel only once', function () {
@@ -65,7 +64,7 @@ it('writes a reply broadcast to the channel only once', function () {
     $order = array_column(iterator_to_array(Jsonl::read($dir.'/messages.jsonl')), 'ts');
 
     expect($order)->toBe([TS_0914, TS_0920])
-        ->and(substr_count((string) file_get_contents($dir.'/raw.md'), 'dale'))->toBe(1);
+        ->and(substr_count(rawCopy($dir), 'dale'))->toBe(1);
 });
 
 it('keeps a broadcast reply in the channel stream when threads are skipped', function () {
@@ -96,7 +95,7 @@ it('skips thread replies when asked to', function () {
     $summary = (new ChannelArchiver(fixtureClient()))->archive(archiveRequest($dir, ['includeThreads' => false]));
 
     expect($summary->replies)->toBe(0)
-        ->and(file_get_contents($dir.'/raw.md'))->not->toContain('dale');
+        ->and(rawCopy($dir))->not->toContain('dale');
 });
 
 it('refuses to archive over an existing archive', function () {
@@ -147,7 +146,7 @@ it('resumes a run that died before rendering', function () {
         ->toBe([TS_0914, TS_0920, TS_0930, TS_NEXT_DAY]);
 });
 
-it('cuts back a half-written render instead of duplicating it', function () {
+it('cuts back a half-written render of a run started before raw/ existed', function () {
     $dir = archiveDir();
 
     file_put_contents($dir.'/messages.jsonl', Jsonl::encode(['ts' => TS_0914])."\n{\"broken\"");
@@ -161,7 +160,8 @@ it('cuts back a half-written render instead of duplicating it', function () {
 
     expect(array_column(iterator_to_array(Jsonl::read($dir.'/messages.jsonl')), 'ts'))
         ->toBe([TS_0914, TS_0920, TS_0930, TS_NEXT_DAY])
-        ->and(file_get_contents($dir.'/raw.md'))->toStartWith('# #eng-leadership');
+        ->and(file_get_contents($dir.'/raw.md'))->toStartWith('# #eng-leadership')
+        ->and(is_dir($dir.'/raw'))->toBeFalse();
 });
 
 it('extends an archive forward without repeating what it already holds', function () {
@@ -188,17 +188,18 @@ it('extends an archive forward without repeating what it already holds', functio
         ->and(array_column(iterator_to_array(Jsonl::read($dir.'/messages.jsonl')), 'ts'))
         ->toBe([TS_0914, TS_0920, TS_0930, TS_NEXT_DAY, TS_LATER]);
 
-    $markdown = file_get_contents($dir.'/raw.md');
+    $markdown = rawCopy($dir);
 
     expect(substr_count($markdown, 'seguimos mañana'))->toBe(1)
         ->and(substr_count($markdown, '## 2026-08-02'))->toBe(1)
         ->and($markdown)->toEndWith("**11:05 Ana Pérez:** una más\n");
 });
 
-it('moves the header range forward on an incremental run', function () {
+it('keeps refreshing a single raw.md and moves its range forward', function () {
     $dir = archiveDir();
 
     (new ChannelArchiver(fixtureClient()))->archive(archiveRequest($dir));
+    $legacy = toLegacyLayout($dir);
 
     $laterClient = new FakeSlackClient(
         pages: [[['ts' => '1785751500.000600', 'user' => 'U01', 'text' => 'tercer día']]],
@@ -208,7 +209,8 @@ it('moves the header range forward on an incremental run', function () {
     (new ChannelArchiver($laterClient))->archive(archiveRequest($dir, ['sinceLast' => true]));
 
     expect(file_get_contents($dir.'/raw.md'))
-        ->toStartWith("# #eng-leadership — Dump completo (2026-08-01 a 2026-08-03)\n");
+        ->toBe(str_replace('a 2026-08-02)', 'a 2026-08-03)', $legacy)."\n## 2026-08-03\n\n**10:05 Franco Gilio:** tercer día\n")
+        ->and(is_dir($dir.'/raw'))->toBeFalse();
 });
 
 it('treats an incremental run on an empty directory as a first archive', function () {
@@ -217,7 +219,8 @@ it('treats an incremental run on an empty directory as a first archive', functio
     $summary = (new ChannelArchiver(fixtureClient()))->archive(archiveRequest($dir, ['sinceLast' => true]));
 
     expect($summary->messages)->toBe(3)
-        ->and(file_get_contents($dir.'/raw.md'))->toStartWith('# #eng-leadership');
+        ->and(array_keys(rawMonths($dir)))->toBe(['2026-08'])
+        ->and(rawMonths($dir)['2026-08'])->toStartWith("# #eng-leadership — 2026-08\n");
 });
 
 it('honours an inclusive date window', function () {

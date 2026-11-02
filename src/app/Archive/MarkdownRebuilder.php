@@ -5,65 +5,134 @@ namespace App\Archive;
 use DateTimeZone;
 use Generator;
 use Illuminate\Support\Arr;
+use LogicException;
 use RuntimeException;
 use Throwable;
 
 /**
- * Rebuilds an archive's raw.md from its messages.jsonl.
+ * Rebuilds an archive's raw/ month files from its messages.jsonl.
  *
  * Nothing is fetched. The messages come from messages.jsonl, and the
- * channel, workspace, date range and timezone from the header the
- * archive run wrote, so the result is what `archive` would write
- * for the same messages under the renderer as it stands today.
+ * channel, workspace and timezone from the header the archive run
+ * wrote, so the result is what `archive` would write for the same
+ * messages under the renderer as it stands today.
+ *
+ * A directory still on the single raw.md moves to raw/ when rebuilt,
+ * and is checked against the single file until then.
  */
 final class MarkdownRebuilder
 {
+    private const EMPTY_SUMMARY = ['messages' => 0, 'threads' => 0, 'replies' => 0, 'first_day' => null, 'last_day' => null];
+
     public function __construct(private readonly NameResolver $names) {}
 
+    /**
+     * Render every month into a directory beside raw/, then move the
+     * months into place and drop the ones no message falls in anymore,
+     * along with the single raw.md. A render that fails leaves raw/ and
+     * raw.md as they were.
+     */
     public function rebuild(string $outDir): ArchiveSummary
     {
-        [$header, $metadata, $messagesPath, $markdownPath] = $this->sources($outDir);
-        $temp = $markdownPath.'.part';
+        [$header, $metadata, $messagesPath] = $this->sources($outDir);
+        $staging = $outDir.'/.raw-render';
 
-        $summary = $this->render($header, $metadata, $messagesPath, LegacyRawFile::openAt($temp, 0, $header->toMarkdown()));
+        RawMonths::remove($staging);
 
-        throw_unless(
-            rename($temp, $markdownPath),
-            RuntimeException::class,
-            "Unable to move the rebuilt {$temp} into place at {$markdownPath}",
+        try {
+            $summary = $this->renderMonths($header, $metadata, $messagesPath, $staging);
+        } catch (Throwable $e) {
+            RawMonths::remove($staging);
+
+            throw $e;
+        }
+
+        RawMonths::replace(RawMonths::dirIn($outDir), $staging);
+
+        if (is_file(RawMonths::legacyPathIn($outDir))) {
+            unlink(RawMonths::legacyPathIn($outDir));
+        }
+
+        return new ArchiveSummary(
+            channelId: $metadata->channelId ?? $header->channelLabel ?? basename($outDir),
+            channelLabel: $header->channelLabel ?? $metadata->channelLabel ?? basename($outDir),
+            messages: $summary['messages'],
+            threads: $summary['threads'],
+            replies: $summary['replies'],
+            skipped: 0,
+            firstDay: $summary['first_day'],
+            lastDay: $summary['last_day'],
+            messagesPath: $messagesPath,
+            markdownPath: RawMonths::dirIn($outDir),
         );
-
-        return $this->summary($header, $metadata, $messagesPath, $markdownPath, $summary);
     }
 
     /**
-     * The first raw.md line a render would change, or null when raw.md
-     * matches messages.jsonl, as it must after both files are redacted.
-     * The render goes to a temporary file, so the archive is untouched.
+     * Where the archive's reading copy first parts from a render of its
+     * messages.jsonl, or null when they match, as they must after both
+     * are redacted. The render goes to a temporary location, so the
+     * archive is untouched.
      */
-    public function firstStaleLine(string $outDir): ?int
+    public function firstDifference(string $outDir): ?RenderDifference
     {
-        [$header, $metadata, $messagesPath, $markdownPath] = $this->sources($outDir);
+        [$header, $metadata, $messagesPath] = $this->sources($outDir);
+
+        if (RawMonths::isLegacy($outDir)) {
+            return $this->legacyDifference($outDir, $header, $metadata, $messagesPath);
+        }
+
+        $rendered = sys_get_temp_dir().'/slack-render-'.bin2hex(random_bytes(6));
+
+        try {
+            $this->renderMonths($header, $metadata, $messagesPath, $rendered);
+
+            return RawMonths::firstDifference(RawMonths::dirIn($outDir), $rendered);
+        } finally {
+            RawMonths::remove($rendered);
+        }
+    }
+
+    private function legacyDifference(string $outDir, ?ArchiveHeader $header, ?ArchiveMetadata $metadata, string $messagesPath): ?RenderDifference
+    {
         $temp = tempnam(sys_get_temp_dir(), 'slack-render-');
 
         throw_if($temp === false, RuntimeException::class, 'Unable to create a temporary file for the render');
+        throw_if($header === null, LogicException::class, 'A single raw.md is only checked once its header is read');
 
         try {
             $this->render($header, $metadata, $messagesPath, LegacyRawFile::openAt($temp, 0, $header->toMarkdown()));
 
-            return $this->firstDifferentLine($markdownPath, $temp);
+            return RenderDifference::between('raw.md', RawMonths::legacyPathIn($outDir), $temp);
         } finally {
             @unlink($temp);
         }
     }
 
     /**
-     * @return array{0: ArchiveHeader, 1: ?ArchiveMetadata, 2: string, 3: string}
+     * An archive that holds no messages has no month files, and so no
+     * header to read: there is nothing to render.
+     *
+     * @return array{messages: int, threads: int, replies: int, first_day: ?string, last_day: ?string}
+     */
+    private function renderMonths(?ArchiveHeader $header, ?ArchiveMetadata $metadata, string $messagesPath, string $dir): array
+    {
+        if ($header === null) {
+            return self::EMPTY_SUMMARY;
+        }
+
+        return $this->render($header, $metadata, $messagesPath, MonthSplitter::fresh($dir, $header));
+    }
+
+    /**
+     * The header comes from the single raw.md while the directory is on
+     * it, and from the newest month file once it is on raw/. Only an
+     * archive that holds messages needs one on raw/.
+     *
+     * @return array{0: ?ArchiveHeader, 1: ?ArchiveMetadata, 2: string}
      */
     private function sources(string $outDir): array
     {
         $messagesPath = ArchiveRequest::messagesPathIn($outDir);
-        $markdownPath = ArchiveRequest::markdownPathIn($outDir);
 
         throw_if(
             is_file(ArchiveRequest::checkpointPathIn($outDir)),
@@ -74,63 +143,31 @@ final class MarkdownRebuilder
         throw_unless(
             is_file($messagesPath),
             RuntimeException::class,
-            "Unable to find messages.jsonl in {$outDir}. archive:render rebuilds raw.md from it",
+            "Unable to find messages.jsonl in {$outDir}. archive:render renders raw/ from it",
         );
 
-        $header = ArchiveHeader::read($markdownPath);
+        $headerPath = $this->headerPath($outDir);
+        $header = $headerPath === null ? null : ArchiveHeader::read($headerPath);
 
         throw_if(
-            $header === null,
+            $header === null && (RawMonths::isLegacy($outDir) || Jsonl::read($messagesPath)->valid()),
             RuntimeException::class,
-            "Unable to read the archive header at the top of {$markdownPath}. archive:render takes the channel, workspace and timezone from it",
+            'Unable to read the archive header at the top of '.($headerPath ?? RawMonths::dirIn($outDir).'/<newest month>.md').'. archive:render takes the channel, workspace and timezone from it',
         );
 
-        return [$header, ArchiveMetadata::load($outDir), $messagesPath, $markdownPath];
+        return [$header, ArchiveMetadata::load($outDir), $messagesPath];
     }
 
-    private function firstDifferentLine(string $current, string $rendered): ?int
+    private function headerPath(string $outDir): ?string
     {
-        $left = fopen($current, 'rb');
-        $right = fopen($rendered, 'rb');
-
-        throw_if($left === false || $right === false, RuntimeException::class, "Unable to read {$current} to compare it with the render");
-
-        try {
-            for ($line = 1; ; $line++) {
-                $currentLine = fgets($left);
-                $renderedLine = fgets($right);
-
-                if ($currentLine === false && $renderedLine === false) {
-                    return null;
-                }
-
-                if ($currentLine !== $renderedLine) {
-                    return $line;
-                }
-            }
-        } finally {
-            fclose($left);
-            fclose($right);
+        if (RawMonths::isLegacy($outDir)) {
+            return RawMonths::legacyPathIn($outDir);
         }
-    }
 
-    /**
-     * @param  array{messages: int, threads: int, replies: int, first_day: ?string, last_day: ?string}  $summary
-     */
-    private function summary(ArchiveHeader $header, ?ArchiveMetadata $metadata, string $messagesPath, string $markdownPath, array $summary): ArchiveSummary
-    {
-        return new ArchiveSummary(
-            channelId: $metadata->channelId ?? $header->channelLabel,
-            channelLabel: $header->channelLabel,
-            messages: $summary['messages'],
-            threads: $summary['threads'],
-            replies: $summary['replies'],
-            skipped: 0,
-            firstDay: $summary['first_day'],
-            lastDay: $summary['last_day'],
-            messagesPath: $messagesPath,
-            markdownPath: $markdownPath,
-        );
+        $dir = RawMonths::dirIn($outDir);
+        $newest = RawMonths::newestIn($dir);
+
+        return $newest === null ? null : RawMonths::pathOf($dir, $newest);
     }
 
     /**
@@ -143,7 +180,7 @@ final class MarkdownRebuilder
     {
         $renderer = new MarkdownRenderer(new SlackMarkup($this->names), $this->names, new DateTimeZone($header->timezone));
 
-        $summary = ['messages' => 0, 'threads' => 0, 'replies' => 0, 'first_day' => null, 'last_day' => null];
+        $summary = self::EMPTY_SUMMARY;
 
         try {
             foreach ($this->threads($messagesPath, $metadata ?? new ArchiveMetadata('', '')) as [$message, $replies]) {

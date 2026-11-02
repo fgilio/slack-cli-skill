@@ -40,13 +40,15 @@ The binary also drops `doctrine/inflector`, so `Str::plural` and friends are not
 
 | Class | Role |
 | --- | --- |
-| `ChannelArchiver` | Streams one conversation to `messages.jsonl` and `raw.md`, checkpointing every page. |
+| `ChannelArchiver` | Streams one conversation to `messages.jsonl` and `raw/`, checkpointing every page. |
 | `Jsonl` | Line-at-a-time reads, writes, joins, and timestamp ordering for the archive files. |
 | `ArchiveRequest` / `ArchiveSummary` | What a run was asked to do, and what it produced. |
 | `ArchiveCheckpoint` | The progress marker that makes `--resume` lossless. Deleted when a run finishes. |
 | `ArchiveMetadata` | The `.archive-meta.json` naming the channel a directory holds. Outlives the run. |
-| `ArchiveHeader` | The four lines that open `raw.md`, written and read back in one place. |
-| `MarkdownRebuilder` | Rebuilds `raw.md` from `messages.jsonl` for `archive:render`, through the same `MarkdownRenderer`. |
+| `ArchiveHeader` | The four lines that open each month file (or a single `raw.md`), written and read back in one place. |
+| `RawSink` | Where a render streams the reading copy. `MonthSplitter` writes `raw/YYYY-MM.md`, `LegacyRawFile` the single `raw.md` of archives written before `raw/`. |
+| `RawMonths` | The `raw/` directory: listing, the resume cut-back, moving a full render into place, and the `--check` comparison. |
+| `MarkdownRebuilder` | Renders `raw/` from `messages.jsonl` for `archive:render`, through the same `MarkdownRenderer`, and moves a single `raw.md` to `raw/`. |
 | `DayBoundary` | Turns a `YYYY-MM-DD` day into the Slack timestamp that bounds it. |
 | `BatchManifest` / `BatchEntry` | The batch manifest, validated up front. |
 | `BatchRunner` / `BatchResult` | Walks the entries, records what each one did, never aborts on one failure. |
@@ -60,6 +62,12 @@ The binary also drops `doctrine/inflector`, so `Str::plural` and friends are not
 `conversations.history` walks a channel backwards from its newest message, so page 0 normally holds the newest slice. Give it an `oldest` floor and no ceiling (what `--after` does) and it pins to the floor and walks **forwards** instead, handing back the oldest slice first while still ordering each page newest message first.
 
 The archiver therefore treats arrival order as meaningless. Each page is sorted by timestamp before it is written, and the ordering pass sorts the page files by the timestamp each one opens with. Pages never overlap, so ordering the files orders the channel without ever holding it in memory. `render` then refuses to write a stream whose timestamps step backwards, which turns any future ordering fault into a non-zero exit rather than a quietly scrambled archive.
+
+### One file per month
+
+The reading copy is `raw/YYYY-MM.md`, so a refresh only ever rewrites the newest month and leaves the rest byte for byte. The layout is a contract shared with the Gmail and WhatsApp archivers in the pla-team repo: month title `# <label> — YYYY-MM`, the same header in every month, each file ending in one newline, a new month copying the header of the newest one. `MonthSplitter` turns the renderer's stream into those files one line at a time.
+
+A refresh records the size of every month file in the checkpoint before it renders. Resuming cuts the months back to those sizes and removes anything newer, then renders the appended stream again, which keeps resume lossless without holding the archive in memory.
 
 ## License
 

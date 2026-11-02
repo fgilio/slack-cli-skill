@@ -60,6 +60,16 @@ it('falls back to the channel name in the markdown header', function () {
     expect(ArchiveScan::directories([$root])[0]->target)->toBe('#eng-leadership');
 });
 
+it('falls back to the channel name in the newest month file', function () {
+    $root = scanRoot();
+    plantArchive($root.'/eng');
+    mkdir($root.'/eng/raw');
+    file_put_contents($root.'/eng/raw/2026-08.md', "# #old-name — 2026-08\n");
+    file_put_contents($root.'/eng/raw/2026-09.md', "# #eng-leadership — 2026-09\n");
+
+    expect(ArchiveScan::directories([$root])[0]->target)->toBe('#eng-leadership');
+});
+
 it('leaves a FIXME on a DM, whose header holds a real name rather than a handle', function () {
     $root = scanRoot();
     plantArchive($root.'/gonza', header: '# DM con Gonzalo Parra — Dump completo (2026-08-01 a 2026-08-02)');

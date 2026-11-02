@@ -3,10 +3,11 @@
 namespace App\Commands;
 
 use App\Archive\MarkdownRebuilder;
+use App\Archive\RawMonths;
 use App\Archive\SlackNameResolver;
 
 /**
- * Rebuild an archive's raw.md from the messages.jsonl beside it.
+ * Render an archive's raw/ month files from the messages.jsonl beside it.
  *
  * Fetches no messages. People's names still go through the same
  * resolver `archive` uses, which reads the cached user directory.
@@ -14,10 +15,10 @@ use App\Archive\SlackNameResolver;
 class ArchiveRenderCommand extends BaseSlackCommand
 {
     protected $signature = 'archive:render
-        {dir : An archive directory, holding messages.jsonl and raw.md}
-        {--check : Compare raw.md with a fresh render and write nothing, exiting 1 when they differ}';
+        {dir : An archive directory, holding messages.jsonl and raw/ (or a single raw.md, which moves to raw/)}
+        {--check : Compare raw/ (or a single raw.md) with a fresh render and write nothing, exiting 1 when they differ}';
 
-    protected $description = 'Render raw.md again from an archive directory\'s messages.jsonl';
+    protected $description = 'Render raw/ again from an archive directory\'s messages.jsonl';
 
     protected function doExecute(): int
     {
@@ -33,6 +34,7 @@ class ArchiveRenderCommand extends BaseSlackCommand
             return $this->check($rebuilder, $outDir);
         }
 
+        $moved = RawMonths::isLegacy($outDir);
         $summary = $rebuilder->rebuild($outDir);
 
         if ($this->wantsJson()) {
@@ -46,6 +48,10 @@ class ArchiveRenderCommand extends BaseSlackCommand
             $this->line("Range: {$summary->firstDay} to {$summary->lastDay}");
         }
 
+        if ($moved) {
+            $this->line('Moved raw.md to raw/, one file per month');
+        }
+
         $this->line($summary->markdownPath);
 
         return self::SUCCESS;
@@ -53,12 +59,13 @@ class ArchiveRenderCommand extends BaseSlackCommand
 
     private function check(MarkdownRebuilder $rebuilder, string $outDir): int
     {
-        $line = $rebuilder->firstStaleLine($outDir);
+        $copy = RawMonths::isLegacy($outDir) ? 'raw.md' : 'raw/';
+        $difference = $rebuilder->firstDifference($outDir);
 
-        if ($line !== null) {
+        if ($difference !== null) {
             return $this->failWith(
-                "raw.md in {$outDir} differs from a render of its messages.jsonl, first at line {$line}. archive:render without --check rewrites it and drops any edit made only to raw.md",
-                ['line' => $line],
+                "{$copy} in {$outDir} differs from a render of its messages.jsonl: {$difference->describe()}. archive:render without --check rewrites it and drops any edit made only to {$copy}",
+                $difference->toArray(),
             );
         }
 
@@ -66,7 +73,7 @@ class ArchiveRenderCommand extends BaseSlackCommand
             return $this->outputJson(['matches' => true]);
         }
 
-        $this->line("raw.md in {$outDir} matches its messages.jsonl");
+        $this->line("{$copy} in {$outDir} matches its messages.jsonl");
 
         return self::SUCCESS;
     }

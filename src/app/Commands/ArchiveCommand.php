@@ -18,14 +18,14 @@ class ArchiveCommand extends BaseSlackCommand
 {
     protected $signature = 'archive
         {target : Channel ID (C…/G…/D…), #channel-name, or @username}
-        {--out= : Directory to write messages.jsonl and raw.md into}
+        {--out= : Directory to write messages.jsonl and raw/ into}
         {--after= : First day to archive, YYYY-MM-DD, inclusive}
         {--before= : Last day to archive, YYYY-MM-DD, inclusive}
         {--resume : Continue the interrupted run recorded in the output directory}
         {--since-last : Append only messages newer than the newest one already archived}
         {--no-threads : Skip thread replies}';
 
-    protected $description = 'Archive a channel or DM to messages.jsonl and raw.md';
+    protected $description = 'Archive a channel or DM to messages.jsonl and raw/';
 
     protected function doExecute(): int
     {

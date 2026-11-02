@@ -1,7 +1,13 @@
 <?php
 
 use App\Archive\ArchiveRequest;
+use App\Archive\ChannelArchiver;
 use App\Archive\Jsonl;
+use App\Commands\ArchiveRenderCommand;
+use App\Services\SlackClient;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Tester\CommandTester;
+use Tests\Support\ConsoleContainer;
 use Tests\Support\FakeSlackClient;
 
 /*
@@ -50,6 +56,85 @@ const TS_0920 = '1785576000.000200';
 const TS_0930 = '1785576600.000300';
 const TS_NEXT_DAY = '1785665100.000400';
 const TS_LATER = '1785668700.000500';
+// 2026-09-01 09:14 and 2026-10-01 09:14 UTC.
+const TS_SEPTEMBER = '1788254040.000600';
+const TS_OCTOBER = '1790846040.000700';
+
+function renderTester(?SlackClient $client = null): CommandTester
+{
+    $command = new ArchiveRenderCommand($client ?? sharedClient());
+    $command->setLaravel(new ConsoleContainer);
+    $command->getDefinition()->addOption(new InputOption('json', null, InputOption::VALUE_NONE));
+
+    return new CommandTester($command);
+}
+
+/**
+ * A thread whose replies carry thread_ts the way Slack sends them, a
+ * message shared without a comment, and a reply also sent to the channel.
+ *
+ * @param  list<list<array<string, mixed>>>  $laterPages  Newest page first.
+ */
+function sharedClient(array $laterPages = []): FakeSlackClient
+{
+    return new FakeSlackClient(
+        pages: [
+            ...$laterPages,
+            [
+                ['ts' => TS_NEXT_DAY, 'user' => 'U01', 'text' => 'seguimos mañana'],
+                [
+                    'ts' => TS_0930,
+                    'user' => 'U02',
+                    'text' => '',
+                    'attachments' => [[
+                        'is_share' => true,
+                        'is_msg_unfurl' => true,
+                        'ts' => TS_0914,
+                        'author_name' => 'Franco Gilio',
+                        'text' => "¿arrancamos?\nhoy",
+                    ]],
+                ],
+                [
+                    'ts' => TS_0920,
+                    'user' => 'U02',
+                    'text' => 'dale',
+                    'thread_ts' => TS_0914,
+                    'subtype' => 'thread_broadcast',
+                ],
+                ['ts' => TS_0914, 'user' => 'U01', 'text' => '¿arrancamos?', 'thread_ts' => TS_0914, 'reply_count' => 1],
+            ],
+        ],
+        threads: [
+            TS_0914 => [
+                ['ts' => TS_0914, 'user' => 'U01', 'text' => '¿arrancamos?', 'thread_ts' => TS_0914],
+                ['ts' => TS_0920, 'user' => 'U02', 'text' => 'dale', 'thread_ts' => TS_0914, 'subtype' => 'thread_broadcast'],
+            ],
+        ],
+        users: ['U01' => 'Franco Gilio', 'U02' => 'Ana Pérez'],
+    );
+}
+
+function archivedWith(FakeSlackClient $client, string $dir, bool $threads = true, bool $sinceLast = false): string
+{
+    (new ChannelArchiver($client))->archive(new ArchiveRequest(
+        channelId: 'C47JM9E9K',
+        outDir: $dir,
+        includeThreads: $threads,
+        sinceLast: $sinceLast,
+    ));
+
+    return rawCopy($dir);
+}
+
+/**
+ * A later page for sharedClient(): the first message of September.
+ *
+ * @return list<list<array<string, mixed>>>
+ */
+function crossMonthPages(): array
+{
+    return [[['ts' => TS_SEPTEMBER, 'user' => 'U02', 'text' => 'arranca septiembre']]];
+}
 
 function archiveDir(): string
 {
@@ -173,4 +258,72 @@ function fixtureClient(): FakeSlackClient
         ],
         users: ['U01' => 'Franco Gilio', 'U02' => 'Ana Pérez'],
     );
+}
+
+/**
+ * The raw/ month files of an archive, keyed by month, oldest first.
+ *
+ * @return array<string, string>
+ */
+function rawMonths(string $dir): array
+{
+    $months = [];
+
+    foreach (glob($dir.'/raw/*.md') ?: [] as $path) {
+        $months[basename($path, '.md')] = (string) file_get_contents($path);
+    }
+
+    ksort($months);
+
+    return $months;
+}
+
+/**
+ * The whole reading copy as one string, each month file under its own
+ * name, so one comparison covers which files exist and what they hold.
+ */
+function rawCopy(string $dir): string
+{
+    if (is_file($dir.'/raw.md')) {
+        return '=== raw.md ==='."\n".file_get_contents($dir.'/raw.md');
+    }
+
+    return collect(rawMonths($dir))
+        ->map(fn (string $contents, string $month): string => "=== raw/{$month}.md ===\n{$contents}")
+        ->implode('');
+}
+
+/**
+ * Turn an archive's raw/ back into the single raw.md an archive held
+ * before raw/ existed: the dated title, the shared header, and every
+ * month's days joined with one newline between months.
+ */
+function toLegacyLayout(string $dir): string
+{
+    $rest = null;
+    $label = null;
+    $days = [];
+
+    foreach (rawMonths($dir) as $contents) {
+        $titleEnd = strpos($contents, "\n");
+        $daysStart = strpos($contents, "\n## ") + 1;
+
+        $label ??= preg_replace('/^# (.+) — \d{4}-\d{2}$/u', '$1', substr($contents, 0, $titleEnd));
+        $rest ??= substr($contents, $titleEnd + 1, $daysStart - $titleEnd - 1);
+        $days[] = substr($contents, $daysStart);
+    }
+
+    $body = implode("\n", $days);
+    preg_match_all('/^## (\d{4}-\d{2}-\d{2})$/m', $body, $found);
+
+    $legacy = "# {$label} — Dump completo ({$found[1][0]} a ".end($found[1]).")\n".$rest.$body;
+
+    foreach (glob($dir.'/raw/*') ?: [] as $path) {
+        unlink($path);
+    }
+
+    rmdir($dir.'/raw');
+    file_put_contents($dir.'/raw.md', $legacy);
+
+    return $legacy;
 }

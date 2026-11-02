@@ -9,7 +9,8 @@ use RuntimeException;
  *
  * An archive is any directory holding a messages.jsonl. Runs from
  * this version onward leave an .archive-meta.json naming the channel,
- * and older ones are read back from the title line of raw.md.
+ * and older ones are read back from the title line of their newest
+ * raw/ month file, or of the single raw.md.
  */
 final class ArchiveScan
 {
@@ -101,7 +102,10 @@ final class ArchiveScan
             return new ScannedArchive($dir, $metadata->channelId, $metadata->channelLabel);
         }
 
-        $label = self::labelFromMarkdown($dir.'/raw.md');
+        $months = RawMonths::dirIn($dir);
+        $newest = RawMonths::newestIn($months);
+
+        $label = self::labelFromMarkdown($newest !== null ? RawMonths::pathOf($months, $newest) : RawMonths::legacyPathIn($dir));
 
         // A channel header carries the channel's own name. A DM header
         // carries a person's real name, which is not the @handle a target
@@ -130,8 +134,6 @@ final class ArchiveScan
             return null;
         }
 
-        return preg_match('/^# (.+?) — Dump completo \(/u', $header, $parts) === 1
-            ? $parts[1]
-            : null;
+        return ArchiveHeader::labelOf($header);
     }
 }
