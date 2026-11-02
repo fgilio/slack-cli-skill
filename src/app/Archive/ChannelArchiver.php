@@ -401,9 +401,8 @@ final class ChannelArchiver
     private function render(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, Closure $progress): ArchiveSummary
     {
         $names = $this->names();
-        $timezone = $this->timezone();
-
         $openMonth = $this->openMonth($request, $checkpoint);
+        $timezone = $this->archivedTimezone($request, $checkpoint, $openMonth) ?? $this->timezone();
 
         $renderer = new MarkdownRenderer(
             new SlackMarkup($names),
@@ -511,6 +510,24 @@ final class ChannelArchiver
         sort($months);
 
         return $months === [] ? null : end($months);
+    }
+
+    /**
+     * The timezone in the header of the file a refresh appends to. Its days
+     * and months were cut in that timezone, so the appended days must be
+     * too, whatever the user's Slack profile says today.
+     */
+    private function archivedTimezone(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, ?string $openMonth): ?DateTimeZone
+    {
+        $path = match (true) {
+            $checkpoint->monthBytes === null => $checkpoint->markdownBytes > 0 ? RawMonths::legacyPathIn($request->outDir) : null,
+            $openMonth !== null => RawMonths::pathOf($request->monthsDir(), $openMonth),
+            default => null,
+        };
+
+        $header = $path === null ? null : ArchiveHeader::read($path);
+
+        return $header === null ? null : new DateTimeZone($header->timezone);
     }
 
     private function openRawSink(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, MarkdownRenderer $renderer, ?string $openMonth): RawSink

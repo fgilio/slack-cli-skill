@@ -145,6 +145,40 @@ it('opens a new month with the header of the newest month and leaves older month
         );
 });
 
+it('keeps refreshing in the timezone the archive was written in', function () {
+    // 2026-08-31 22:30, 2026-08-31 23:10 and 2026-09-01 00:30 UTC: the
+    // first two already fall on September 1 in UTC+02.
+    $boundary = ['ts' => '1788215400.000100', 'user' => 'U01', 'text' => 'cierra agosto'];
+    $sameDay = ['ts' => '1788217800.000200', 'user' => 'U02', 'text' => 'sigue'];
+    $september = ['ts' => '1788222600.000300', 'user' => 'U01', 'text' => 'ya es septiembre'];
+    $users = ['U01' => 'Franco Gilio', 'U02' => 'Ana Pérez'];
+
+    $dir = archiveDir();
+    archivedWith(new FakeSlackClient(pages: [[$boundary]], users: $users), $dir);
+    $august = rawMonths($dir)['2026-08'];
+
+    refreshWith(new FakeSlackClient(pages: [[$september, $sameDay, $boundary]], users: $users, timezone: 'Africa/Johannesburg'), $dir);
+
+    expect(rawMonths($dir))->toBe([
+        '2026-08' => $august."\n**23:10 Ana Pérez:** sigue\n",
+        '2026-09' => "# #eng-leadership — 2026-09\n\n".AUGUST_HEADER."\n## 2026-09-01\n\n**00:30 Franco Gilio:** ya es septiembre\n",
+    ])->and(renderTester()->execute(['dir' => $dir, '--check' => true]))->toBe(0);
+});
+
+it('keeps refreshing a single raw.md in the timezone it was written in', function () {
+    $boundary = ['ts' => '1788215400.000100', 'user' => 'U01', 'text' => 'cierra agosto'];
+    $sameDay = ['ts' => '1788217800.000200', 'user' => 'U02', 'text' => 'sigue'];
+    $users = ['U01' => 'Franco Gilio', 'U02' => 'Ana Pérez'];
+
+    $dir = archiveDir();
+    archivedWith(new FakeSlackClient(pages: [[$boundary]], users: $users), $dir);
+    $legacy = toLegacyLayout($dir);
+
+    refreshWith(new FakeSlackClient(pages: [[$sameDay, $boundary]], users: $users, timezone: 'Africa/Johannesburg'), $dir);
+
+    expect(file_get_contents($dir.'/raw.md'))->toBe($legacy."\n**23:10 Ana Pérez:** sigue\n");
+});
+
 it('leaves raw/ untouched when a refresh brings nothing', function () {
     $dir = archiveDir();
     archivedWith(sharedClient(), $dir);

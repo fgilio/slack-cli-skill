@@ -33,6 +33,7 @@ final class FakeSlackClient extends SlackClient
         private readonly array $users = [],
         private readonly ?int $crashAfterPages = null,
         private readonly bool $forwardWhenFloored = true,
+        private readonly string $timezone = 'UTC',
     ) {}
 
     public function historyPages(string $channelId, ?string $oldest = null, ?string $latest = null, ?string $cursor = null): Generator
@@ -127,7 +128,7 @@ final class FakeSlackClient extends SlackClient
 
     public function getAuthenticatedUserTimezone(): ?string
     {
-        return 'UTC';
+        return $this->timezone;
     }
 
     public function getUserName(string $userId): string
