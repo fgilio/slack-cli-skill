@@ -8,10 +8,7 @@ use App\Archive\SlackEntryArchiver;
 
 function scanRoot(): string
 {
-    $dir = sys_get_temp_dir().'/slack-cli-scan-'.bin2hex(random_bytes(6));
-    mkdir($dir, 0755, true);
-
-    return $dir;
+    return testTempDir('scan');
 }
 
 function plantArchive(string $dir, ?string $header = null, ?array $metadata = null): string

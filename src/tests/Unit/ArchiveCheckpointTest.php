@@ -4,18 +4,7 @@ use App\Archive\ArchiveCheckpoint;
 
 function checkpointPath(): string
 {
-    $dir = sys_get_temp_dir().'/slack-cli-checkpoint-'.bin2hex(random_bytes(6));
-    mkdir($dir, 0755, true);
-
-    register_shutdown_function(function () use ($dir) {
-        foreach (glob($dir.'/*') ?: [] as $path) {
-            @unlink($path);
-        }
-
-        @rmdir($dir);
-    });
-
-    return $dir.'/.archive-checkpoint.json';
+    return testTempDir('checkpoint').'/.archive-checkpoint.json';
 }
 
 function checkpoint(string $path): ArchiveCheckpoint

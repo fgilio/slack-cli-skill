@@ -50,6 +50,53 @@ expect()->extend('toBeOne', function () {
 |
 */
 
+/**
+ * A fresh path for one test, inside a scratch root this test process owns.
+ * The root, and everything the tests write under it, is removed when the
+ * process exits, so a run leaves nothing behind in the system temp folder.
+ */
+function testTempPath(string $name): string
+{
+    static $root = null;
+
+    if ($root === null) {
+        $root = sys_get_temp_dir().'/slack-cli-tests-'.getmypid().'-'.bin2hex(random_bytes(4));
+        mkdir($root, 0755, true);
+
+        register_shutdown_function(fn () => removeTree($root));
+    }
+
+    return $root.'/'.$name.'-'.bin2hex(random_bytes(6));
+}
+
+/**
+ * A fresh, empty directory for one test. See testTempPath().
+ */
+function testTempDir(string $name): string
+{
+    $dir = testTempPath($name);
+    mkdir($dir, 0755, true);
+
+    return $dir;
+}
+
+function removeTree(string $path): void
+{
+    if (! is_dir($path) || is_link($path)) {
+        @unlink($path);
+
+        return;
+    }
+
+    foreach (scandir($path) ?: [] as $child) {
+        if ($child !== '.' && $child !== '..') {
+            removeTree($path.'/'.$child);
+        }
+    }
+
+    @rmdir($path);
+}
+
 // 1785575640 is 2026-08-01 09:14:00 UTC.
 const TS_0914 = '1785575640.000100';
 const TS_0920 = '1785576000.000200';
@@ -138,10 +185,7 @@ function crossMonthPages(): array
 
 function archiveDir(): string
 {
-    $dir = sys_get_temp_dir().'/slack-cli-run-'.bin2hex(random_bytes(6));
-    mkdir($dir, 0755, true);
-
-    return $dir;
+    return testTempDir('run');
 }
 
 /**
