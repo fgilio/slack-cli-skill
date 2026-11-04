@@ -4,18 +4,7 @@ use App\Archive\Jsonl;
 
 function tempArchiveDir(): string
 {
-    $dir = sys_get_temp_dir().'/slack-cli-archive-'.bin2hex(random_bytes(6));
-    mkdir($dir, 0755, true);
-
-    register_shutdown_function(function () use ($dir) {
-        foreach (glob($dir.'/*') ?: [] as $path) {
-            @unlink($path);
-        }
-
-        @rmdir($dir);
-    });
-
-    return $dir;
+    return testTempDir('archive');
 }
 
 /**

@@ -12,7 +12,7 @@ function batchEntry(string $target, ?string $out = null, array $overrides = []):
 {
     return new BatchEntry(
         target: $target,
-        outDir: $out ?? sys_get_temp_dir().'/slack-cli-batch-'.bin2hex(random_bytes(6)),
+        outDir: $out ?? testTempPath('batch'),
         after: $overrides['after'] ?? null,
         before: $overrides['before'] ?? null,
         noThreads: $overrides['noThreads'] ?? false,

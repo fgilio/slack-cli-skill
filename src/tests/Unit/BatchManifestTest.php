@@ -10,7 +10,7 @@ function manifest(array $entries): BatchManifest
 
 function manifestFile(string $contents): string
 {
-    $path = sys_get_temp_dir().'/slack-cli-manifest-'.bin2hex(random_bytes(6)).'.json';
+    $path = testTempPath('manifest').'.json';
     file_put_contents($path, $contents);
 
     return $path;
