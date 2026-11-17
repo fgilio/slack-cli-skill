@@ -23,7 +23,8 @@ class ArchiveCommand extends BaseSlackCommand
         {--before= : Last day to archive, YYYY-MM-DD, inclusive}
         {--resume : Continue the interrupted run recorded in the output directory}
         {--since-last : Append only messages newer than the newest one already archived}
-        {--no-threads : Skip thread replies}';
+        {--no-threads : Skip thread replies}
+        {--late-replies=30 : With --since-last, days back to look for replies posted to older threads (0 skips it)}';
 
     protected $description = 'Archive a channel or DM to messages.jsonl and raw/';
 
@@ -45,6 +46,7 @@ class ArchiveCommand extends BaseSlackCommand
             includeThreads: ! $this->option('no-threads'),
             resume: (bool) $this->option('resume'),
             sinceLast: (bool) $this->option('since-last'),
+            lateReplyDays: max(0, (int) $this->option('late-replies')),
         );
 
         $summary = (new ChannelArchiver($this->client))->archive(
@@ -59,6 +61,10 @@ class ArchiveCommand extends BaseSlackCommand
         $this->line('');
         $this->line("<fg=cyan>Archived {$summary->channelLabel}</>");
         $this->line("{$summary->messages} messages, {$summary->threads} threads, {$summary->replies} replies");
+
+        if ($summary->lateReplies > 0) {
+            $this->line("{$summary->lateReplies} late replies added to {$summary->lateThreads} older threads");
+        }
 
         if ($summary->firstDay !== null) {
             $this->line("Range: {$summary->firstDay} to {$summary->lastDay}");

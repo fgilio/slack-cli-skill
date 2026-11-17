@@ -15,6 +15,9 @@ final class ArchiveRequest
         public readonly bool $includeThreads = true,
         public readonly bool $resume = false,
         public readonly bool $sinceLast = false,
+        // How far back a --since-last run looks for replies that reached
+        // older threads after they were archived. 0 turns the pass off.
+        public readonly int $lateReplyDays = LateReplies::DEFAULT_LOOKBACK_DAYS,
     ) {}
 
     public function messagesPath(): string

@@ -24,7 +24,17 @@ final class ArchiveMetadata
         public readonly string $channelId,
         public readonly string $channelLabel,
         public readonly array $threadSegments = [],
+        // The floor of a late-reply pass that started and has not finished.
+        // A refresh moves the newest message forward before the pass runs,
+        // so without it a retry would look from a later floor and skip the
+        // threads in between.
+        public readonly ?string $pendingLateFloor = null,
     ) {}
+
+    public function withPendingLateFloor(?string $floor): self
+    {
+        return new self($this->channelId, $this->channelLabel, $this->threadSegments, $floor);
+    }
 
     /**
      * Record one more run. A --since-last run with a different --no-threads
@@ -33,7 +43,7 @@ final class ArchiveMetadata
     public function withRun(string $channelId, string $channelLabel, ?string $sinceTs, bool $nested): self
     {
         if ($sinceTs === null) {
-            return new self($channelId, $channelLabel, [['after' => null, 'nested' => $nested]]);
+            return new self($channelId, $channelLabel, [['after' => null, 'nested' => $nested]], $this->pendingLateFloor);
         }
 
         // Files written before the field existed came from runs that used the default.
@@ -43,7 +53,7 @@ final class ArchiveMetadata
             $segments[] = ['after' => $sinceTs, 'nested' => $nested];
         }
 
-        return new self($channelId, $channelLabel, $segments);
+        return new self($channelId, $channelLabel, $segments, $this->pendingLateFloor);
     }
 
     /**
@@ -95,6 +105,7 @@ final class ArchiveMetadata
             $channelId,
             is_string($label) && $label !== '' ? $label : $channelId,
             self::threadSegmentsFrom($decoded['threads'] ?? null),
+            is_string($decoded['late_replies_pending_from'] ?? null) ? $decoded['late_replies_pending_from'] : null,
         );
     }
 
@@ -122,6 +133,7 @@ final class ArchiveMetadata
             'channel_id' => $this->channelId,
             'channel' => $this->channelLabel,
             'threads' => $this->threadSegments,
+            ...($this->pendingLateFloor === null ? [] : ['late_replies_pending_from' => $this->pendingLateFloor]),
             'updated_at' => gmdate('c'),
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
 

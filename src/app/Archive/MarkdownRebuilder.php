@@ -30,9 +30,10 @@ final class MarkdownRebuilder
      * Render every month into a directory beside raw/, then move the
      * months into place and drop the ones no message falls in anymore,
      * along with the single raw.md. A render that fails leaves raw/ and
-     * raw.md as they were.
+     * raw.md as they were. Given a replacement for messages.jsonl, the
+     * months are rendered from it and it takes the old file's place.
      */
-    public function rebuild(string $outDir): ArchiveSummary
+    public function rebuild(string $outDir, ?string $replacement = null): ArchiveSummary
     {
         [$header, $metadata, $messagesPath] = $this->sources($outDir);
         $staging = $outDir.'/.raw-render';
@@ -40,7 +41,7 @@ final class MarkdownRebuilder
         RawMonths::remove($staging);
 
         try {
-            $summary = $this->renderMonths($header, $metadata, $messagesPath, $staging);
+            $summary = $this->renderMonths($header, $metadata, $replacement ?? $messagesPath, $staging);
         } catch (Throwable $e) {
             RawMonths::remove($staging);
 
@@ -48,6 +49,14 @@ final class MarkdownRebuilder
         }
 
         RawMonths::replace(RawMonths::dirIn($outDir), $staging);
+
+        // A replacement for messages.jsonl moves into place only after the
+        // months rendered from it. If it cannot, the old messages.jsonl
+        // still lacks what the months show, so the next late-reply pass
+        // fetches it again and renders the months once more.
+        if ($replacement !== null && ! rename($replacement, $messagesPath)) {
+            throw new RuntimeException("Unable to move {$replacement} over {$messagesPath}");
+        }
 
         if (is_file(RawMonths::legacyPathIn($outDir))) {
             unlink(RawMonths::legacyPathIn($outDir));

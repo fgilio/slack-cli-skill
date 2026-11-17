@@ -23,7 +23,8 @@ class ArchiveBatchCommand extends BaseSlackCommand
         {paths?* : The manifest JSON file, or the directories to scan when --init is passed}
         {--init : Print a manifest built from the archives already in the given directories}
         {--since-last : Append only what is newer than the newest message each archive already holds}
-        {--only= : Archive only the entries whose target or output directory matches this glob}';
+        {--only= : Archive only the entries whose target or output directory matches this glob}
+        {--late-replies=30 : With --since-last, days back to look for replies posted to older threads (0 skips it)}';
 
     protected $description = 'Archive every conversation in a manifest, one after another';
 
@@ -67,6 +68,7 @@ class ArchiveBatchCommand extends BaseSlackCommand
         $runner = new BatchRunner(new SlackEntryArchiver(
             $this->client,
             (bool) $this->option('since-last'),
+            max(0, (int) $this->option('late-replies')),
         ));
 
         $results = $runner->run(
