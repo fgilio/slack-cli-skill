@@ -177,7 +177,7 @@ final class LateReplies
             }
         }
 
-        return array_values(Jsonl::sortByTimestamp(array_values($new)));
+        return Jsonl::sortByTimestamp(array_values($new));
     }
 
     /**
