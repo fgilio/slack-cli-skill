@@ -48,14 +48,15 @@ final class MarkdownRebuilder
             throw $e;
         }
 
-        // A replacement for messages.jsonl moves into place only once the
-        // months rendered from it are whole, right before they do, so a
-        // failed render leaves both as they were.
-        if ($replacement !== null) {
-            rename($replacement, $messagesPath);
-        }
-
         RawMonths::replace(RawMonths::dirIn($outDir), $staging);
+
+        // A replacement for messages.jsonl moves into place only after the
+        // months rendered from it. If it cannot, the old messages.jsonl
+        // still lacks what the months show, so the next late-reply pass
+        // fetches it again and renders the months once more.
+        if ($replacement !== null && ! rename($replacement, $messagesPath)) {
+            throw new RuntimeException("Unable to move {$replacement} over {$messagesPath}");
+        }
 
         if (is_file(RawMonths::legacyPathIn($outDir))) {
             unlink(RawMonths::legacyPathIn($outDir));

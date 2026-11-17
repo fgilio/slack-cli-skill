@@ -79,15 +79,31 @@ final class ChannelArchiver
             return $summary;
         }
 
-        $floor = $this->laterOf(
+        $metadata = ArchiveMetadata::load($request->outDir) ?? new ArchiveMetadata($summary->channelId, $summary->channelLabel);
+
+        // A pass that failed earlier left its floor behind, and the retry
+        // looks back at least that far.
+        $floor = (string) $this->laterOf(
             $request->oldest,
-            sprintf('%d.000000', (int) $checkpoint->sinceTs - $request->lateReplyDays * 86400),
+            $this->earlierOf(
+                sprintf('%d.000000', (int) $checkpoint->sinceTs - $request->lateReplyDays * 86400),
+                $metadata->pendingLateFloor,
+            ),
         );
 
+        $metadata->withPendingLateFloor($floor)->save($request->outDir);
+
         $late = (new LateReplies($this->client, $this->names()))
-            ->catchUp($request->outDir, $request->channelId, (string) $floor, $progress);
+            ->catchUp($request->outDir, $request->channelId, $floor, $progress);
+
+        (ArchiveMetadata::load($request->outDir) ?? $metadata)->withPendingLateFloor(null)->save($request->outDir);
 
         return $summary->withLateReplies($late['threads'], $late['replies']);
+    }
+
+    private function earlierOf(string $a, ?string $b): string
+    {
+        return $b !== null && Jsonl::compareTimestamps($b, $a) < 0 ? $b : $a;
     }
 
     // =========================================================================

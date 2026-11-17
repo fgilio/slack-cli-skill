@@ -1,5 +1,6 @@
 <?php
 
+use App\Archive\ArchiveMetadata;
 use App\Archive\BatchEntry;
 use App\Archive\BatchResult;
 use App\Archive\ChannelArchiver;
@@ -155,4 +156,25 @@ it('keeps the archive whole when the folded copy cannot be written in full', fun
     expect(file_get_contents($dir.'/messages.jsonl'))->toBe($messages)
         ->and(rawMonths($dir))->toBe($raw)
         ->and(is_file($dir.'/messages.jsonl.part'))->toBeFalse();
+});
+
+it('looks back from the floor a failed pass left behind, then clears it', function () {
+    $dir = archiveDir();
+
+    (new ChannelArchiver(threadedClient()))->archive(archiveRequest($dir));
+
+    $fortyDaysOn = [[['ts' => sprintf('%d.000100', (int) TS_NEXT_DAY + 40 * 86400), 'user' => 'U01', 'text' => 'cuarenta días después']]];
+    (new ChannelArchiver(threadedClient(extraPages: $fortyDaysOn)))->archive(archiveRequest($dir, ['sinceLast' => true]));
+
+    // The run that appended the day-41 message failed during its late pass,
+    // which had started from before the thread.
+    ArchiveMetadata::load($dir)->withPendingLateFloor('1785500000.000000')->save($dir);
+
+    $later = threadedClient([lateReply()], replyCount: 2, latestReply: TS_LATE_REPLY, extraPages: $fortyDaysOn);
+    $summary = (new ChannelArchiver($later))->archive(archiveRequest($dir, ['sinceLast' => true]));
+
+    expect($summary->lateReplies)->toBe(1)
+        ->and(file_get_contents($dir.'/messages.jsonl'))->toContain('ya está')
+        ->and(ArchiveMetadata::load($dir)->pendingLateFloor)->toBeNull()
+        ->and(file_get_contents(ArchiveMetadata::pathIn($dir)))->not->toContain('late_replies_pending_from');
 });
