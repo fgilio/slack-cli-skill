@@ -19,6 +19,7 @@ function archiveRequest(string $dir, array $overrides = []): ArchiveRequest
         includeThreads: $overrides['includeThreads'] ?? true,
         resume: $overrides['resume'] ?? false,
         sinceLast: $overrides['sinceLast'] ?? false,
+        lateReplyDays: $overrides['lateReplyDays'] ?? 30,
     );
 }
 

@@ -127,6 +127,8 @@ it('carries an entry into the machine-readable summary', function () {
         'messages' => 12,
         'replies' => 2,
         'threads' => 1,
+        'late_threads' => 0,
+        'late_replies' => 0,
         'first_day' => '2026-08-01',
         'last_day' => '2026-08-02',
         'messages_path' => '/tmp/gonza/messages.jsonl',

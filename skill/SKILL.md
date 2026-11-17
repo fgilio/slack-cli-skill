@@ -102,6 +102,7 @@ slack-cli archive <target> --out=<dir> [options]
 | `--resume` | Continue the interrupted run recorded in the output directory. |
 | `--since-last` | Append only what is newer than the newest message already archived. |
 | `--no-threads` | Skip thread replies. |
+| `--late-replies=<days>` | With `--since-last`, how many days back to look for replies posted to threads that were already archived. Default 30, `0` skips the pass. |
 
 The archive lands in `--out`:
 
@@ -136,7 +137,9 @@ Versions before 0.2.0 wrote a single `raw.md` titled `# <label> — Dump complet
 
 Every page that reaches disk updates `.archive-checkpoint.json` in the output directory. If a run is interrupted, rerun the same command with `--resume` and it picks up at the page it was about to fetch. Without `--resume` it refuses to touch a directory that holds a checkpoint, or one that already holds a finished archive.
 
-`--since-last` is the refresh path: it reads the newest message already in `messages.jsonl` and fetches only what came after. It appends to `messages.jsonl` and to the newest month file, and opens a new month file when a day of a new month arrives, copying the header from the newest month. Older months are never touched. Days and times follow the timezone in the header of the file being appended to, so changing the timezone on your Slack profile never moves a refresh into the wrong day or month. A resumed refresh first cuts the month files back to the sizes it recorded when it started and removes any month it created, so a run killed mid-write never duplicates or loses a line. History is never rewritten, which means replies posted to an old thread after that thread was archived do not come back. Re-archive into a clean directory when you need them.
+`--since-last` is the refresh path: it reads the newest message already in `messages.jsonl` and fetches only what came after. It appends to `messages.jsonl` and to the newest month file, and opens a new month file when a day of a new month arrives, copying the header from the newest month. Older months are never touched. Days and times follow the timezone in the header of the file being appended to, so changing the timezone on your Slack profile never moves a refresh into the wrong day or month. A resumed refresh first cuts the month files back to the sizes it recorded when it started and removes any month it created, so a run killed mid-write never duplicates or loses a line. Messages are never rewritten.
+
+Since 0.3.0 a refresh also brings in late replies: replies posted to a thread after the run that archived it. Once the new messages are on disk, it reads the conversation again from `--late-replies` days (default 30) before the newest message it extended from, and asks `conversations.replies` only for the threads whose reply count or latest reply moved. Each new reply goes into `messages.jsonl` right after the replies already archived under its parent, the file is written beside the old one and moved into place, and `raw/` is rendered again from it. Only the months that hold a thread that gained a reply change, so an older month can change. A reply already in `messages.jsonl` is never written twice. The pass is skipped for `--no-threads`, for a directory still on a single `raw.md`, and with `--late-replies=0`. A thread older than the window keeps the replies it had: run once with a wider window (`--late-replies=120`) to reach further back, or re-archive into a clean directory.
 
 Every finished run also drops an `.archive-meta.json` naming the channel the directory holds and whether each run nested thread replies, which is what lets `archive:batch --init` rebuild a manifest later.
 
@@ -184,6 +187,7 @@ The manifest is a JSON array. Each entry needs a `target` (whatever the single `
 | Option | What it does |
 | --- | --- |
 | `--since-last` | Apply the refresh path to every entry. Each directory has its own history, so each one picks up where it left off. |
+| `--late-replies=<days>` | Days back each refresh looks for late replies, as in `archive`. Default 30. |
 | `--only=<glob>` | Archive only the entries whose target or output directory name matches. A bare word matches anywhere, so `--only=gparra` finds `@gparra`. |
 | `--init` | Print a manifest built from the archives already sitting in the given directories, rather than archiving anything. |
 | `--json` | Emit the summary as JSON instead of a table. |

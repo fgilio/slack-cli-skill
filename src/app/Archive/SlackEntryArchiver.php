@@ -18,6 +18,7 @@ final class SlackEntryArchiver implements EntryArchiver
     public function __construct(
         private readonly SlackClient $client,
         private readonly bool $sinceLast = false,
+        private readonly int $lateReplyDays = LateReplies::DEFAULT_LOOKBACK_DAYS,
     ) {}
 
     public function archive(BatchEntry $entry, ?Closure $progress = null): ArchiveSummary
@@ -34,6 +35,7 @@ final class SlackEntryArchiver implements EntryArchiver
             // mid-run continues instead of stopping to ask for --resume.
             resume: is_file(ArchiveRequest::checkpointPathIn($entry->outDir)),
             sinceLast: $this->sinceLast,
+            lateReplyDays: $this->lateReplyDays,
         );
 
         // ChannelArchiver caches the channel's metadata, so every entry

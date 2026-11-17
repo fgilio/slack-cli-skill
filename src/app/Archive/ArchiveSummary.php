@@ -18,7 +18,18 @@ final class ArchiveSummary
         public readonly ?string $lastDay,
         public readonly string $messagesPath,
         public readonly string $markdownPath,
+        public readonly int $lateThreads = 0,
+        public readonly int $lateReplies = 0,
     ) {}
+
+    public function withLateReplies(int $threads, int $replies): self
+    {
+        return new self(
+            $this->channelId, $this->channelLabel, $this->messages, $this->threads, $this->replies,
+            $this->skipped, $this->firstDay, $this->lastDay, $this->messagesPath, $this->markdownPath,
+            $threads, $replies,
+        );
+    }
 
     /**
      * @return array<string, mixed>
@@ -36,6 +47,8 @@ final class ArchiveSummary
             'last_day' => $this->lastDay,
             'messages_path' => $this->messagesPath,
             'markdown_path' => $this->markdownPath,
+            'late_threads' => $this->lateThreads,
+            'late_replies' => $this->lateReplies,
         ];
     }
 }

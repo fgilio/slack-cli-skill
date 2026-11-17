@@ -61,7 +61,33 @@ final class ChannelArchiver
         $checkpoint->delete();
         $this->removeDirectory($request->workDir());
 
-        return $summary;
+        return $this->catchUpLateReplies($request, $checkpoint, $summary, $progress);
+    }
+
+    /**
+     * A refresh only fetches the threads of the messages it appends, so a
+     * reply posted later to an older thread needs a pass of its own. It
+     * runs once the refresh is whole on disk, and only on the monthly
+     * layout: rendering raw/ again would move a single raw.md to it.
+     */
+    private function catchUpLateReplies(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, ArchiveSummary $summary, Closure $progress): ArchiveSummary
+    {
+        if ($checkpoint->sinceTs === null
+            || ! $request->includeThreads
+            || $request->lateReplyDays <= 0
+            || RawMonths::isLegacy($request->outDir)) {
+            return $summary;
+        }
+
+        $floor = $this->laterOf(
+            $request->oldest,
+            sprintf('%d.000000', (int) $checkpoint->sinceTs - $request->lateReplyDays * 86400),
+        );
+
+        $late = (new LateReplies($this->client, $this->names()))
+            ->catchUp($request->outDir, $request->channelId, (string) $floor, $progress);
+
+        return $summary->withLateReplies($late['threads'], $late['replies']);
     }
 
     // =========================================================================
