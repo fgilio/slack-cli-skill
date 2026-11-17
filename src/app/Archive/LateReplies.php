@@ -52,8 +52,13 @@ final class LateReplies
 
         $replies = array_sum(array_map('count', $late));
 
-        $this->fold($messagesPath, $late);
-        (new MarkdownRebuilder($this->names))->rebuild($outDir);
+        $folded = $this->fold($messagesPath, $late);
+
+        try {
+            (new MarkdownRebuilder($this->names))->rebuild($outDir, $folded);
+        } finally {
+            @unlink($folded);
+        }
 
         $progress(sprintf('Added %d late %s to %d %s.', $replies, $replies === 1 ? 'reply' : 'replies', count($late), count($late) === 1 ? 'thread' : 'threads'));
 
@@ -183,12 +188,13 @@ final class LateReplies
     /**
      * messages.jsonl keeps each thread's replies right after its parent,
      * which is what the render reads them back by. The file is written
-     * whole beside the old one and moved into place, so a run killed
-     * here leaves the archive as it was.
+     * whole beside the old one, and only the rebuild that renders raw/
+     * from it moves it into place, so a run killed or failing before
+     * then leaves the archive as it was.
      *
      * @param  array<string, list<array<string, mixed>>>  $late
      */
-    private function fold(string $messagesPath, array $late): void
+    private function fold(string $messagesPath, array $late): string
     {
         $temp = $messagesPath.'.part';
         $handle = fopen($temp, 'wb');
@@ -207,16 +213,42 @@ final class LateReplies
                 continue;
             }
 
-            $this->writeBlock($handle, $block, $replies, $late);
+            $this->writeBlockOrDiscard($handle, $temp, $block, $replies, $late);
 
             $block = (string) Arr::get($message, 'ts', '');
             $replies = [$message];
         }
 
-        $this->writeBlock($handle, $block, $replies, $late);
-        fclose($handle);
+        $this->writeBlockOrDiscard($handle, $temp, $block, $replies, $late);
 
-        rename($temp, $messagesPath);
+        if (! fclose($handle)) {
+            @unlink($temp);
+
+            throw new RuntimeException("Unable to finish writing {$temp}");
+        }
+
+        return $temp;
+    }
+
+    /**
+     * The fold copies the whole archive, so a short write would cut
+     * history, not only the new replies: it stops the run and drops the
+     * partial copy.
+     *
+     * @param  resource  $handle
+     * @param  list<array<string, mixed>>  $lines
+     * @param  array<string, list<array<string, mixed>>>  $late
+     */
+    private function writeBlockOrDiscard($handle, string $temp, ?string $parentTs, array $lines, array $late): void
+    {
+        try {
+            $this->writeBlock($handle, $parentTs, $lines, $late);
+        } catch (RuntimeException $e) {
+            fclose($handle);
+            @unlink($temp);
+
+            throw $e;
+        }
     }
 
     /**
@@ -234,7 +266,14 @@ final class LateReplies
         $replies = isset($late[$parentTs]) ? Jsonl::sortByTimestamp([...$lines, ...$late[$parentTs]]) : $lines;
 
         foreach ([$parent, ...$replies] as $line) {
-            fwrite($handle, Jsonl::encode($line)."\n");
+            $text = Jsonl::encode($line)."\n";
+
+            // A full disk makes fwrite() write less than it was given.
+            throw_if(
+                fwrite($handle, $text) !== strlen($text),
+                RuntimeException::class,
+                'Unable to write the archive with its late replies: the disk took less than it was given',
+            );
         }
     }
 }

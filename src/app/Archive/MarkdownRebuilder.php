@@ -30,9 +30,10 @@ final class MarkdownRebuilder
      * Render every month into a directory beside raw/, then move the
      * months into place and drop the ones no message falls in anymore,
      * along with the single raw.md. A render that fails leaves raw/ and
-     * raw.md as they were.
+     * raw.md as they were. Given a replacement for messages.jsonl, the
+     * months are rendered from it and it takes the old file's place.
      */
-    public function rebuild(string $outDir): ArchiveSummary
+    public function rebuild(string $outDir, ?string $replacement = null): ArchiveSummary
     {
         [$header, $metadata, $messagesPath] = $this->sources($outDir);
         $staging = $outDir.'/.raw-render';
@@ -40,11 +41,18 @@ final class MarkdownRebuilder
         RawMonths::remove($staging);
 
         try {
-            $summary = $this->renderMonths($header, $metadata, $messagesPath, $staging);
+            $summary = $this->renderMonths($header, $metadata, $replacement ?? $messagesPath, $staging);
         } catch (Throwable $e) {
             RawMonths::remove($staging);
 
             throw $e;
+        }
+
+        // A replacement for messages.jsonl moves into place only once the
+        // months rendered from it are whole, right before they do, so a
+        // failed render leaves both as they were.
+        if ($replacement !== null) {
+            rename($replacement, $messagesPath);
         }
 
         RawMonths::replace(RawMonths::dirIn($outDir), $staging);

@@ -4,9 +4,11 @@ use App\Archive\BatchEntry;
 use App\Archive\BatchResult;
 use App\Archive\ChannelArchiver;
 use App\Archive\Jsonl;
+use App\Archive\LateReplies;
 use App\Archive\MarkdownRebuilder;
 use Tests\Support\FakeNameResolver;
 use Tests\Support\FakeSlackClient;
+use Tests\Support\ShortWriteStream;
 
 const TS_LATE_REPLY = '1785668760.000900';
 
@@ -129,4 +131,28 @@ it('reports late replies as an archived batch entry', function () {
     expect($result->status())->toBe(BatchResult::STATUS_ARCHIVED)
         ->and($result->outcome())->toBe('0 messages, 0 replies appended, 1 late reply in 1 older thread')
         ->and($result->toArray()['late_replies'])->toBe(1);
+});
+
+it('keeps the archive whole when the folded copy cannot be written in full', function () {
+    $dir = archiveDir();
+
+    (new ChannelArchiver(threadedClient()))->archive(archiveRequest($dir));
+    $messages = file_get_contents($dir.'/messages.jsonl');
+    $raw = rawMonths($dir);
+
+    $later = threadedClient([lateReply()], replyCount: 2, latestReply: TS_LATE_REPLY);
+    $catchUp = new LateReplies($later, new FakeNameResolver(['U01' => 'Franco Gilio', 'U02' => 'Ana Pérez']));
+
+    stream_wrapper_register(ShortWriteStream::SCHEME, ShortWriteStream::class);
+
+    try {
+        expect(fn () => $catchUp->catchUp(ShortWriteStream::SCHEME.'://'.$dir, 'C47JM9E9K', '0.000000'))
+            ->toThrow(RuntimeException::class, 'Unable to write the archive with its late replies');
+    } finally {
+        stream_wrapper_unregister(ShortWriteStream::SCHEME);
+    }
+
+    expect(file_get_contents($dir.'/messages.jsonl'))->toBe($messages)
+        ->and(rawMonths($dir))->toBe($raw)
+        ->and(is_file($dir.'/messages.jsonl.part'))->toBeFalse();
 });
