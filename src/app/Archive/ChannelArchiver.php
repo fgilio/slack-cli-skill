@@ -53,45 +53,22 @@ final class ChannelArchiver
         $summary = $this->render($request, $checkpoint, $progress);
 
         // The checkpoint goes away with the run, so the channel this
-        // directory holds is recorded where a later refresh can find it.
-        (ArchiveMetadata::load($request->outDir) ?? new ArchiveMetadata($summary->channelId, $summary->channelLabel))
-            ->withRun($summary->channelId, $summary->channelLabel, $checkpoint->sinceTs, $request->includeThreads)
-            ->save($request->outDir);
+        // directory holds is recorded where a later refresh can find it,
+        // along with the floor of the late-reply pass about to run: from
+        // here on the newest message has moved, and only that record says
+        // how far back the pass has to look if it does not finish.
+        $metadata = (ArchiveMetadata::load($request->outDir) ?? new ArchiveMetadata($summary->channelId, $summary->channelLabel))
+            ->withRun($summary->channelId, $summary->channelLabel, $checkpoint->sinceTs, $request->includeThreads);
+        $floor = $this->lateReplyFloor($request, $checkpoint, $metadata);
+
+        ($floor === null ? $metadata : $metadata->withPendingLateFloor($floor))->save($request->outDir);
 
         $checkpoint->delete();
         $this->removeDirectory($request->workDir());
 
-        return $this->catchUpLateReplies($request, $checkpoint, $summary, $progress);
-    }
-
-    /**
-     * A refresh only fetches the threads of the messages it appends, so a
-     * reply posted later to an older thread needs a pass of its own. It
-     * runs once the refresh is whole on disk, and only on the monthly
-     * layout: rendering raw/ again would move a single raw.md to it.
-     */
-    private function catchUpLateReplies(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, ArchiveSummary $summary, Closure $progress): ArchiveSummary
-    {
-        if ($checkpoint->sinceTs === null
-            || ! $request->includeThreads
-            || $request->lateReplyDays <= 0
-            || RawMonths::isLegacy($request->outDir)) {
+        if ($floor === null) {
             return $summary;
         }
-
-        $metadata = ArchiveMetadata::load($request->outDir) ?? new ArchiveMetadata($summary->channelId, $summary->channelLabel);
-
-        // A pass that failed earlier left its floor behind, and the retry
-        // looks back at least that far.
-        $floor = (string) $this->laterOf(
-            $request->oldest,
-            $this->earlierOf(
-                sprintf('%d.000000', (int) $checkpoint->sinceTs - $request->lateReplyDays * 86400),
-                $metadata->pendingLateFloor,
-            ),
-        );
-
-        $metadata->withPendingLateFloor($floor)->save($request->outDir);
 
         $late = (new LateReplies($this->client, $this->names()))
             ->catchUp($request->outDir, $request->channelId, $floor, $progress);
@@ -99,6 +76,32 @@ final class ChannelArchiver
         (ArchiveMetadata::load($request->outDir) ?? $metadata)->withPendingLateFloor(null)->save($request->outDir);
 
         return $summary->withLateReplies($late['threads'], $late['replies']);
+    }
+
+    /**
+     * A refresh only fetches the threads of the messages it appends, so a
+     * reply posted later to an older thread needs a pass of its own, from
+     * this floor. There is none for a first archive, for --no-threads or
+     * --late-replies=0, or on a single raw.md: rendering raw/ again would
+     * move it to the monthly layout. A pass that failed earlier left its
+     * floor behind, and the retry looks back at least that far.
+     */
+    private function lateReplyFloor(ArchiveRequest $request, ArchiveCheckpoint $checkpoint, ArchiveMetadata $metadata): ?string
+    {
+        if ($checkpoint->sinceTs === null
+            || ! $request->includeThreads
+            || $request->lateReplyDays <= 0
+            || RawMonths::isLegacy($request->outDir)) {
+            return null;
+        }
+
+        return (string) $this->laterOf(
+            $request->oldest,
+            $this->earlierOf(
+                sprintf('%d.000000', (int) $checkpoint->sinceTs - $request->lateReplyDays * 86400),
+                $metadata->pendingLateFloor,
+            ),
+        );
     }
 
     private function earlierOf(string $a, ?string $b): string
